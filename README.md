@@ -59,4 +59,5 @@ After booking:
 *Tools Used*:
 RAG Tool
 Booking Persistence Tool
+
 Email Tool
