@@ -9,3 +9,6 @@ pdf2image
 pytesseract
 openai
 groq
+markdown
+render_chat_bubble
+
