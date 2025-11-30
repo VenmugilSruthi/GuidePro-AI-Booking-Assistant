@@ -1,27 +1,36 @@
-# rag.py
 import numpy as np
 import pdfplumber
 import streamlit as st
 from groq import Groq
 from typing import List
 
-# Embedding model
 EMB_MODEL = "text-embedding-3-small"
-
-# Load API key
-client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
 
 # -----------------------------------------------------
-# SAFE embedding function (single text only)
+# Create Groq client safely (only when needed)
+# -----------------------------------------------------
+def get_groq_client():
+    try:
+        return Groq(api_key=st.secrets["GROQ_API_KEY"])
+    except:
+        return None
+
+
+# -----------------------------------------------------
+# SAFE embedding function
 # -----------------------------------------------------
 def get_embedding_safe(text: str):
     text = text.strip()
     if not text:
         return None
 
-    # HARD LIMIT - Groq fails if too large
     text = text[:1500]
+
+    client = get_groq_client()
+    if client is None:
+        print("Groq client error")
+        return None
 
     try:
         resp = client.embeddings.create(
@@ -92,7 +101,7 @@ class RAGStore:
         words = text.split()
         chunks = []
 
-        size = 150  # small chunks
+        size = 150
 
         for i in range(0, len(words), size):
             chunk = " ".join(words[i:i + size]).strip()
