@@ -15,16 +15,15 @@ def generate_answer(client, messages):
     if client is None:
         return "LLM is not configured. Missing GROQ_API_KEY."
 
-    # ✅ FIX: Clean messages for Groq API
+    # ✅ FIX: CLEAN messages for Groq (VERY IMPORTANT)
     cleaned_messages = []
     for m in messages:
         if isinstance(m, dict) and "role" in m and "content" in m:
             cleaned_messages.append({
                 "role": m["role"],
-                "content": str(m["content"])  # force clean string
+                "content": str(m["content"])
             })
 
-    # If no valid messages, add dummy system prompt
     if not cleaned_messages:
         cleaned_messages = [{"role": "user", "content": "Hello"}]
 
