@@ -7,7 +7,8 @@ from typing import List
 from groq import Groq
 
 # Groq embedding model
-EMB_MODEL = "nomic-embed-text"
+EMB_MODEL = "nomic-embed-text-v1.5"
+
 
 # Initialize Groq Client
 groq_key = st.secrets.get("GROQ_API_KEY", None)
@@ -94,3 +95,4 @@ class RAGStore:
 
         best_idx = int(np.argmax(sims))
         return self.chunks[best_idx]
+
