@@ -7,11 +7,12 @@ load_dotenv()
 # local modules
 from utils import render_chat_bubble
 from rag import RAGStore
-from booking_flow import start_booking_flow, handle_booking_turn
+from booking_flow import start_booking_flow, handle_booking_turn 
 from email_utils import send_confirmation_email
 from db import init_db, add_booking, get_bookings, delete_booking, export_bookings_csv
 from hotel_data import hotels
-from llm_utils import get_llm_client, transcribe_audio, generate_answer
+from llm_utils import get_llm_client, transcribe_audio, generate_answer 
+
 
 # ----------------------------------------------------------
 # PAGE CONFIG
@@ -22,15 +23,20 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+
 # ----------------------------------------------------------
-# PREMIUM UI (NO WAVE DIVIDER)
+# PREMIUM UI (same as your original)
 # ----------------------------------------------------------
 st.markdown("""
 <style>
+
 html, body, [class*="css"] {
     font-family: 'Inter', sans-serif;
 }
-.main { background: #ffffff; }
+
+.main {
+    background: #ffffff;
+}
 
 [data-testid="stSidebar"] {
     background-color: #c5d5c5;
@@ -38,25 +44,32 @@ html, body, [class*="css"] {
     padding-top: 25px;
 }
 .sidebar-title {
-    font-size: 28px; font-weight: 800;
-    color: #3A7AFE; text-align: center;
+    font-size: 28px;
+    font-weight: 800;
+    color: #3A7AFE;
+    text-align: center;
 }
 .sidebar-section {
-    margin-top: 20px; font-weight: 700;
+    margin-top: 20px;
+    font-weight: 700;
     color: #1F3B7F;
 }
 
-/* HERO */
 .hero-bg {
-    width: 100%; height: 430px;
+    width: 100%;
+    height: 430px;
     background-image: url('https://images.unsplash.com/photo-1506744038136-46273834b3fb');
-    background-size: cover; background-position: center;
+    background-size: cover;
+    background-position: center;
     border-radius: 0px;
     position: relative;
     margin: -60px 0 0 0;
 }
+
 .hero-card {
-    position: absolute; top: 62%; left: 50%;
+    position: absolute;
+    top: 62%;
+    left: 50%;
     transform: translate(-50%, -50%);
     width: 70%;
     background: rgba(255, 255, 255, 0.45);
@@ -67,32 +80,43 @@ html, body, [class*="css"] {
     box-shadow: 0px 10px 40px rgba(0,0,0,0.3);
 }
 .hero-title {
-    font-size: 48px; font-weight: 900;
-    color: #1f2e4b; margin-bottom: 10px;
+    font-size: 48px;
+    font-weight: 900;
+    color: #1f2e4b;
+    margin-bottom: 10px;
 }
-.hero-sub { font-size: 20px; color: #2c3e50; }
+.hero-sub {
+    font-size: 20px;
+    color: #2c3e50;
+}
 
-/* Chat Bubbles */
 .chat-user {
     background: #d6e5ff;
     padding: 12px 18px;
     border-radius: 14px 14px 4px 14px;
-    margin-bottom: 12px; color: #003060;
-    font-size: 16px; max-width: 75%;
+    margin-bottom: 12px;
+    color: #003060;
+    font-size: 16px;
+    max-width: 75%;
 }
 .chat-bot {
     background: white;
     padding: 12px 18px;
     border-radius: 14px 14px 14px 4px;
-    margin-bottom: 12px; border: 1px solid #ececec;
+    margin-bottom: 12px;
+    border: 1px solid #ececec;
     box-shadow: 0 2px 4px rgba(0,0,0,0.08);
-    font-size: 16px; max-width: 75%;
+    font-size: 16px;
+    max-width: 75%;
 }
 
-/* Fixed input */
 .fixed-input-container {
-    position: fixed; bottom: 0; left: 0; right: 0;
-    padding: 10px; background: white;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 10px;
+    background: white;
     border-top: 1px solid #e1e1e1;
     z-index: 2000;
 }
@@ -102,18 +126,20 @@ html, body, [class*="css"] {
     padding: 12px !important;
 }
 .stChatInputContainer {
-    max-width: 100%; margin: 0 auto;
+    max-width: 100%;
+    margin: 0 auto;
 }
 .stChatInput {
     padding: 30px 50px;
     font-size: 16px;
 }
+
 </style>
 """, unsafe_allow_html=True)
 
 
 # ----------------------------------------------------------
-# INITIALIZE STATES
+# INITIALIZE STATE
 # ----------------------------------------------------------
 init_db()
 
@@ -131,21 +157,6 @@ if "llm_client" not in st.session_state:
 
 if "booking_in_progress" not in st.session_state:
     st.session_state.booking_in_progress = False
-
-if "current_booking_data" not in st.session_state:
-    st.session_state.current_booking_data = {}
-
-if "_LAST_ASKED_KEY" not in st.session_state:
-    st.session_state['_LAST_ASKED_KEY'] = None
-
-if "required_slots" not in st.session_state:
-    st.session_state.required_slots = {}
-
-if "filled_slots" not in st.session_state:
-    st.session_state.filled_slots = {}
-
-if "booking_step" not in st.session_state:
-    st.session_state.booking_step = None
 
 
 # ----------------------------------------------------------
@@ -166,18 +177,19 @@ with st.sidebar:
 
 
 # ----------------------------------------------------------
-# LLM FALLBACK (when RAG is not used)
+# LLM FALLBACK
 # ----------------------------------------------------------
-def call_llm(messages):
+def call_llm_system(messages):
     client = st.session_state.llm_client
     try:
         return generate_answer(client, messages)
     except:
-        return "Unable to generate response."
+        last_user = next((m for m in reversed(messages) if m["role"] == "user"), None)
+        return st.session_state.rag.query(last_user["content"])
 
 
 # ----------------------------------------------------------
-# CHAT ASSISTANT PAGE
+# CHAT PAGE
 # ----------------------------------------------------------
 if page == "Chat Assistant":
 
@@ -219,48 +231,53 @@ if page == "Chat Assistant":
         user_msg = final_text.lower()
         st.session_state.chat.append({"role": "user", "content": final_text})
 
-        rag_used = False
+        # -----------------------------
+        # 1️⃣ RAG (only when relevant)
+        # -----------------------------
+        rag_keywords = ["pdf", "document", "summary", "summarize", "faq", "from pdf"]
 
-        # Conditions to use RAG
+        used_rag = False
         if len(st.session_state.rag.embeddings) > 0:
-            if user_msg.endswith("?") or any(k in user_msg for k in ["pdf", "document", "summary", "summarize", "information"]):
-                rag_answer = st.session_state.rag.query(final_text)
-                st.session_state.chat.append({"role": "assistant", "content": rag_answer})
-                rag_used = True
+            if any(k in user_msg for k in rag_keywords):
+                ans = st.session_state.rag.query(final_text)
+                st.session_state.chat.append({"role": "assistant", "content": ans})
+                used_rag = True
 
-        if not rag_used:
+        # -----------------------------
+        # 2️⃣ Booking flow
+        # -----------------------------
+        if not used_rag:
             if start_booking_flow(final_text) or st.session_state.booking_in_progress:
                 resp = handle_booking_turn(final_text)
-                st.session_state.chat.append({"role": "assistant", "content": resp})
+                st.session_state.chat.append(
+                    {"role": "assistant", "content": resp}
+                )
                 st.rerun()
 
-        if not rag_used:
-            reply = call_llm(st.session_state.chat)
+        # -----------------------------
+        # 3️⃣ LLM fallback
+        # -----------------------------
+        if not used_rag:
+            reply = call_llm_system(st.session_state.chat)
             st.session_state.chat.append({"role": "assistant", "content": reply})
 
         st.rerun()
 
 
 # ----------------------------------------------------------
-# TRIP PLANNER
+# OTHER PAGES (unchanged)
 # ----------------------------------------------------------
 elif page == "Trip Planner":
     st.header("Trip Planner")
     st.write("Plan your perfect vacation with AI.")
-
     trip_type = st.selectbox("Trip Type", ["Beach", "City", "Mountain", "International"])
     guests = st.number_input("Guests", 1, 20, 2)
     destination = st.text_input("Destination")
-
     if st.button("Generate Itinerary"):
-        query = f"Create a detailed 3-day {trip_type} itinerary for {guests} guests to {destination}."
-        reply = call_llm([{"role": "user", "content": query}])
+        query = f"Create a detailed 3-day {trip_type} trip itinerary for {guests} guests to {destination}."
+        reply = call_llm_system([{"role": "user", "content": query}])
         st.write(reply)
 
-
-# ----------------------------------------------------------
-# HOTELS BROWSER
-# ----------------------------------------------------------
 elif page == "Hotels Browser":
     st.header("Hotels Browser")
     for h in hotels:
@@ -269,14 +286,10 @@ elif page == "Hotels Browser":
         st.write(h["location"])
         st.image(h["images"][0], width=250)
 
-
-# ----------------------------------------------------------
-# ADMIN PANEL
-# ----------------------------------------------------------
 elif page == "Admin":
     st.header("Admin Panel")
-    st.subheader("All Bookings")
-    st.table(get_bookings())
+    data = get_bookings()
+    st.table(data)
 
     if st.button("Export as CSV"):
         export_bookings_csv()
@@ -287,10 +300,6 @@ elif page == "Admin":
         delete_booking(del_id)
         st.success("Booking Deleted")
 
-
-# ----------------------------------------------------------
-# ABOUT PAGE
-# ----------------------------------------------------------
 elif page == "About":
     st.header("About GuidePro AI")
     st.write("Your smart AI travelling assistant.")
