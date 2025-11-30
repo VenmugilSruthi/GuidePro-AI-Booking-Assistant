@@ -11,7 +11,7 @@ from booking_flow import start_booking_flow, handle_booking_turn
 from email_utils import send_confirmation_email
 from db import init_db, add_booking, get_bookings, delete_booking, export_bookings_csv
 from hotel_data import hotels
-from llm_utils import get_llm_client, transcribe_audio, generate_answer 
+from llm_utils import get_llm_client, generate_answer
 
 
 # ----------------------------------------------------------
@@ -303,4 +303,5 @@ elif page == "Admin":
 elif page == "About":
     st.header("About GuidePro AI")
     st.write("Your smart AI travelling assistant.")
+
 
