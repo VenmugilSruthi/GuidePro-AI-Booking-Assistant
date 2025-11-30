@@ -267,26 +267,35 @@ if page == "Chat Assistant":
 
         st.session_state.chat.append({"role": "user", "content": final_text})
 
-        # RAG first
-        if user_msg.endswith("?"):
-            rag_ans = st.session_state.rag.query(final_text)
-            if "No relevant information" not in rag_ans:
-                st.session_state.chat.append({"role": "assistant", "content": rag_ans})
-                st.rerun()
-
-        # Booking flow
+        # ------------------------------------------
+# SMART RAG + BOOKING + LLM HANDLING
+# ------------------------------------------
+    rag_used = False
+    
+    # Use RAG ONLY IF PDFs exist AND user asks a PDF-related question
+    if len(st.session_state.rag.embeddings) > 0:
+    
+        rag_keywords = ["pdf", "document", "summary", "summarize", "content", "information"]
+    
+        if any(k in user_msg for k in rag_keywords):
+            rag_answer = st.session_state.rag.query(final_text)
+            st.session_state.chat.append({"role": "assistant", "content": rag_answer})
+            rag_used = True
+    
+    # Booking flow
+    if not rag_used:
         if start_booking_flow(final_text) or st.session_state.booking_in_progress:
             resp = handle_booking_turn(final_text)
             st.session_state.chat.append({"role": "assistant", "content": resp})
             st.rerun()
-
-        # LLM fallback
+    
+    # Normal AI response (fallback)
+    if not rag_used and not st.session_state.booking_in_progress:
         reply = call_llm_system(st.session_state.chat)
         st.session_state.chat.append({"role": "assistant", "content": reply})
-
-        st.rerun()
-
-    st.markdown("</div>", unsafe_allow_html=True)
+    
+    st.rerun()
+    
 
 
 # ----------------------------------------------------------
@@ -346,4 +355,5 @@ elif page == "Admin":
 elif page == "About":
     st.header("About GuidePro AI")
     st.write("Your smart AI travelling assistant.")
+
 
