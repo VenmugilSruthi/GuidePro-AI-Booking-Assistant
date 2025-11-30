@@ -90,8 +90,6 @@ html, body, [class*="css"] {
     color: #2c3e50;
 }
 
-
-
 /* Chat bubbles */
 .chat-user {
     background: #d6e5ff;
@@ -129,24 +127,24 @@ html, body, [class*="css"] {
     border: 2px solid #bad2ff !important;
     padding: 12px !important;
 }
+
 /* Increase chat input width */
 .stChatInputContainer {
-    max-width: 100% ;  
-    margin: 0 auto ;
+    max-width: 100%;
+    margin: 0 auto;
 }
 
 /* Increase actual input box size */
 .stChatInput {
     padding: 30px 50px;
-    font-size: 16px ;
+    font-size: 16px;
 }
-            
 
 </style>
 """, unsafe_allow_html=True)
 
 # ----------------------------------------------------------
-# INITIALIZE STATES (BOOKING FIX INCLUDED)
+# INITIALIZE STATES
 # ----------------------------------------------------------
 init_db()
 
@@ -180,23 +178,21 @@ if "filled_slots" not in st.session_state:
 if "booking_step" not in st.session_state:
     st.session_state.booking_step = None
 
-
 # ----------------------------------------------------------
 # SIDEBAR
 # ----------------------------------------------------------
 with st.sidebar:
     st.markdown("<div class='sidebar-title'>GuidePro AI</div>", unsafe_allow_html=True)
-    
+
     page = st.radio("Navigate", 
                     ["Chat Assistant", "Trip Planner", "Hotels Browser", "Admin", "About"])
-    
+
     st.markdown("<div class='sidebar-section'>Upload PDFs for RAG</div>", unsafe_allow_html=True)
-    
+
     uploaded = st.file_uploader("Upload PDF files", type=["pdf"], accept_multiple_files=True)
     if uploaded:
         st.session_state.rag.add_documents(uploaded)
         st.success("PDF(s) indexed successfully!")
-
 
 # ----------------------------------------------------------
 # LLM HELPER
@@ -208,16 +204,16 @@ def call_llm_system(messages):
             return generate_answer(client, messages)
         except:
             pass
-    
+
     last_user = next((m for m in reversed(messages) if m["role"] == "user"), None)
     return st.session_state.rag.query(last_user["content"])
-
 
 # ----------------------------------------------------------
 # PAGE: CHAT ASSISTANT
 # ----------------------------------------------------------
 if page == "Chat Assistant":
 
+    # HERO
     st.markdown("""
         <div class="hero-bg">
             <div class="hero-card">
@@ -227,11 +223,14 @@ if page == "Chat Assistant":
         </div>
     """, unsafe_allow_html=True)
 
+    # CHAT CARD
     st.markdown("<div class='chat-card'>", unsafe_allow_html=True)
 
+    # Chat History
     for msg in st.session_state.chat:
         render_chat_bubble(msg)
 
+    # Buttons
     col1, col2, col3 = st.columns(3)
     final_text = None
 
@@ -249,6 +248,7 @@ if page == "Chat Assistant":
 
     st.markdown("---")
 
+    # Chat input
     st.markdown('<div class="fixed-input-container">', unsafe_allow_html=True)
     new_input = st.chat_input("Type your message…")
     st.markdown('</div>', unsafe_allow_html=True)
@@ -256,18 +256,21 @@ if page == "Chat Assistant":
     if new_input:
         final_text = new_input
 
-    # -----------------------------------------------
-    # FIXED BLOCK STARTS HERE
-    # -----------------------------------------------
     if final_text:
+
         user_msg = final_text.lower()
         st.session_state.chat.append({"role": "user", "content": final_text})
 
+        # ------------------------------------------
+        # SMART RAG + BOOKING + LLM HANDLING
+        # ------------------------------------------
         rag_used = False
 
-        # Only use RAG if PDFs uploaded AND user asked PDF-related question
+        # RAG only when PDFs exist AND user asks PDF-related queries
         if len(st.session_state.rag.embeddings) > 0:
-            rag_keywords = ["pdf", "document", "summary", "summarize", "content", "information"]
+
+            rag_keywords = ["pdf", "document", "summary", "summarise",
+                            "content", "explain", "info", "information"]
 
             if any(k in user_msg for k in rag_keywords):
                 rag_answer = st.session_state.rag.query(final_text)
@@ -281,16 +284,12 @@ if page == "Chat Assistant":
                 st.session_state.chat.append({"role": "assistant", "content": resp})
                 st.rerun()
 
-        # Normal AI fallback
+        # Normal LLM Fallback
         if not rag_used and not st.session_state.booking_in_progress:
             reply = call_llm_system(st.session_state.chat)
             st.session_state.chat.append({"role": "assistant", "content": reply})
 
         st.rerun()
-    # -----------------------------------------------
-    # FIXED BLOCK ENDS HERE
-    # -----------------------------------------------
-
 
 # ----------------------------------------------------------
 # PAGE: TRIP PLANNER
@@ -309,7 +308,6 @@ elif page == "Trip Planner":
         reply = call_llm_system([{"role": "user", "content": query}])
         st.write(reply)
 
-
 # ----------------------------------------------------------
 # PAGE: HOTELS BROWSER
 # ----------------------------------------------------------
@@ -321,7 +319,6 @@ elif page == "Hotels Browser":
         st.subheader(h["name"])
         st.write(h["location"])
         st.image(h["images"][0], width=250)
-
 
 # ----------------------------------------------------------
 # PAGE: ADMIN
@@ -341,7 +338,6 @@ elif page == "Admin":
     if st.button("Delete Booking"):
         delete_booking(del_id)
         st.success("Booking Deleted")
-
 
 # ----------------------------------------------------------
 # PAGE: ABOUT
