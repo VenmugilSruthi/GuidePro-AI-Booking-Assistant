@@ -1,4 +1,4 @@
-import os
+if start_booking_flow(final_text) or st.session_state.booking_in_progress:import os
 import streamlit as st
 from datetime import datetime
 from dotenv import load_dotenv
@@ -198,10 +198,14 @@ if page == "Chat Assistant":
         # 2️⃣ BOOKING FLOW
         # -----------------------------
         if not used_rag:
-            if start_booking_flow(final_text) or st.session_state.booking_in_progress:
+            booking_keywords = ["book", "room", "hotel", "reservation", "check-in"]
+            is_booking = any(k in user_msg for k in booking_keywords)
+            if is_booking:
+                st.session_state.booking_in_progress = True
                 resp = handle_booking_turn(final_text)
                 st.session_state.chat.append({"role": "assistant", "content": resp})
                 st.rerun()
+
 
         # -----------------------------
         # 3️⃣ LLM FALLBACK (FIXED)
@@ -255,5 +259,6 @@ elif page == "Admin":
 elif page == "About":
     st.header("About GuidePro AI")
     st.write("Your smart AI travelling assistant.")
+
 
 
