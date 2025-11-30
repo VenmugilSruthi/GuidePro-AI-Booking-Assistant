@@ -171,7 +171,6 @@ if "current_booking_data" not in st.session_state:
 if "_LAST_ASKED_KEY" not in st.session_state:
     st.session_state['_LAST_ASKED_KEY'] = None
 
-# 🔥 FIX FOR ERROR: initialize required booking variables
 if "required_slots" not in st.session_state:
     st.session_state.required_slots = {}
 
@@ -219,7 +218,6 @@ def call_llm_system(messages):
 # ----------------------------------------------------------
 if page == "Chat Assistant":
 
-    # HERO
     st.markdown("""
         <div class="hero-bg">
             <div class="hero-card">
@@ -229,14 +227,11 @@ if page == "Chat Assistant":
         </div>
     """, unsafe_allow_html=True)
 
-    # CHAT CARD
     st.markdown("<div class='chat-card'>", unsafe_allow_html=True)
 
-    # Chat history
     for msg in st.session_state.chat:
         render_chat_bubble(msg)
 
-    # Buttons
     col1, col2, col3 = st.columns(3)
     final_text = None
 
@@ -254,7 +249,6 @@ if page == "Chat Assistant":
 
     st.markdown("---")
 
-    # Chat input
     st.markdown('<div class="fixed-input-container">', unsafe_allow_html=True)
     new_input = st.chat_input("Type your message…")
     st.markdown('</div>', unsafe_allow_html=True)
@@ -262,40 +256,40 @@ if page == "Chat Assistant":
     if new_input:
         final_text = new_input
 
+    # -----------------------------------------------
+    # FIXED BLOCK STARTS HERE
+    # -----------------------------------------------
     if final_text:
         user_msg = final_text.lower()
-
         st.session_state.chat.append({"role": "user", "content": final_text})
 
-        # ------------------------------------------
-# SMART RAG + BOOKING + LLM HANDLING
-# ------------------------------------------
-    rag_used = False
-    
-    # Use RAG ONLY IF PDFs exist AND user asks a PDF-related question
-    if len(st.session_state.rag.embeddings) > 0:
-    
-        rag_keywords = ["pdf", "document", "summary", "summarize", "content", "information"]
-    
-        if any(k in user_msg for k in rag_keywords):
-            rag_answer = st.session_state.rag.query(final_text)
-            st.session_state.chat.append({"role": "assistant", "content": rag_answer})
-            rag_used = True
-    
-    # Booking flow
-    if not rag_used:
-        if start_booking_flow(final_text) or st.session_state.booking_in_progress:
-            resp = handle_booking_turn(final_text)
-            st.session_state.chat.append({"role": "assistant", "content": resp})
-            st.rerun()
-    
-    # Normal AI response (fallback)
-    if not rag_used and not st.session_state.booking_in_progress:
-        reply = call_llm_system(st.session_state.chat)
-        st.session_state.chat.append({"role": "assistant", "content": reply})
-    
-    st.rerun()
-    
+        rag_used = False
+
+        # Only use RAG if PDFs uploaded AND user asked PDF-related question
+        if len(st.session_state.rag.embeddings) > 0:
+            rag_keywords = ["pdf", "document", "summary", "summarize", "content", "information"]
+
+            if any(k in user_msg for k in rag_keywords):
+                rag_answer = st.session_state.rag.query(final_text)
+                st.session_state.chat.append({"role": "assistant", "content": rag_answer})
+                rag_used = True
+
+        # Booking flow
+        if not rag_used:
+            if start_booking_flow(final_text) or st.session_state.booking_in_progress:
+                resp = handle_booking_turn(final_text)
+                st.session_state.chat.append({"role": "assistant", "content": resp})
+                st.rerun()
+
+        # Normal AI fallback
+        if not rag_used and not st.session_state.booking_in_progress:
+            reply = call_llm_system(st.session_state.chat)
+            st.session_state.chat.append({"role": "assistant", "content": reply})
+
+        st.rerun()
+    # -----------------------------------------------
+    # FIXED BLOCK ENDS HERE
+    # -----------------------------------------------
 
 
 # ----------------------------------------------------------
@@ -355,5 +349,3 @@ elif page == "Admin":
 elif page == "About":
     st.header("About GuidePro AI")
     st.write("Your smart AI travelling assistant.")
-
-
