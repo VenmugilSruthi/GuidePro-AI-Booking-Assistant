@@ -14,3 +14,4 @@ torch==2.0.1
 sentence-transformers==2.2.2
 huggingface-hub==0.19.4
 transformers==4.30.2
+pdfplumber
