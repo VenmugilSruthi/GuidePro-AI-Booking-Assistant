@@ -1,31 +1,35 @@
-import numpy as np
+import os
 import faiss
+import numpy as np
 import pdfplumber
 from groq import Groq
-import os
 
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 EMB_MODEL = "text-embedding-3-small"
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
-
-# ---------- EMBEDDING FUNCTION ----------
-def get_embedding(text):
-    r = client.embeddings.create(
+# -----------------------------------------
+# SAFE EMBEDDING FUNCTION
+# -----------------------------------------
+def get_embedding(text: str):
+    text = text[:2000]   # prevent Groq NotFoundError
+    resp = client.embeddings.create(
         model=EMB_MODEL,
         input=text
     )
-    return np.array(r.data[0].embedding, dtype="float32")
+    return resp.data[0].embedding
 
 
-# ---------- CHUNKING ----------
-def chunk_text(text, max_len=350):
+# -----------------------------------------
+# PDF TEXT CLEANER & CHUNKER
+# -----------------------------------------
+def chunk_text(text, chunk_size=400):
     words = text.split()
     chunks = []
     cur = []
 
     for w in words:
         cur.append(w)
-        if len(cur) >= max_len:
+        if len(cur) >= chunk_size:
             chunks.append(" ".join(cur))
             cur = []
 
@@ -35,35 +39,34 @@ def chunk_text(text, max_len=350):
     return chunks
 
 
-# ---------- RAG STORE ----------
+# -----------------------------------------
+# RAG CLASS
+# -----------------------------------------
 class RAGStore:
     def __init__(self):
         self.index = faiss.IndexFlatL2(1536)
-        self.chunks = []
+        self.text_chunks = []
 
-    def add_documents(self, uploaded_files):
-
-        for f in uploaded_files:
+    def add_documents(self, files):
+        for f in files:
             with pdfplumber.open(f) as pdf:
-                full = ""
+                full_text = ""
                 for page in pdf.pages:
-                    full += page.extract_text() + "\n"
+                    full_text += page.extract_text() or ""
 
-            # Split into chunks
-            parts = chunk_text(full)
+            # break into smaller chunks (prevents duplicate output)
+            chunks = chunk_text(full_text, chunk_size=120)
 
-            for p in parts:
-                emb = get_embedding(p)
+            for ch in chunks:
+                emb = np.array(get_embedding(ch)).astype("float32")
                 self.index.add(np.array([emb]))
-                self.chunks.append(p)
+                self.text_chunks.append(ch)
 
-    def query(self, question, top_k=2):
-        q_emb = get_embedding(question).reshape(1, -1)
-        _, idx = self.index.search(q_emb, top_k)
+    def query(self, question, top_k=3):
+        q_emb = np.array(get_embedding(question)).astype("float32").reshape(1, -1)
+        D, I = self.index.search(q_emb, top_k)
 
-        results = [self.chunks[i] for i in idx[0] if i < len(self.chunks)]
+        results = [self.text_chunks[i] for i in I[0]]
+        joined = "\n".join(results)
 
-        if not results:
-            return "No relevant information found."
-
-        return "\n".join(results)
+        return joined if joined.strip() else "No relevant information found."
