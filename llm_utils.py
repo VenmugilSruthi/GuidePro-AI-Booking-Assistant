@@ -10,19 +10,23 @@ def get_llm_client():
         return Groq(api_key=GROQ_API_KEY)
     return None
 
+
 def generate_answer(client, messages):
     if client is None:
         return "LLM is not configured. Missing GROQ_API_KEY."
 
-    # --- CLEAN Streamlit chat messages so Groq accepts them ---
+    # ✅ FIX: Clean messages for Groq API
     cleaned_messages = []
     for m in messages:
         if isinstance(m, dict) and "role" in m and "content" in m:
             cleaned_messages.append({
                 "role": m["role"],
-                "content": str(m["content"])  # convert ANY type to string
+                "content": str(m["content"])  # force clean string
             })
-    # ----------------------------------------------------------
+
+    # If no valid messages, add dummy system prompt
+    if not cleaned_messages:
+        cleaned_messages = [{"role": "user", "content": "Hello"}]
 
     try:
         resp = client.chat.completions.create(
@@ -34,5 +38,3 @@ def generate_answer(client, messages):
     except Exception as e:
         print("Groq LLM error:", e)
         return "I'm having trouble generating a response."
-
-
