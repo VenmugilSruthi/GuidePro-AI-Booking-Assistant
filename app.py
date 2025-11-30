@@ -130,25 +130,36 @@ if page == "Chat Assistant":
     new_input = st.chat_input("Type your message…")
 
     if new_input:
-        final_text = new_input.lower()
+        user_msg = new_input.lower()
         st.session_state.chat.append({"role": "user", "content": new_input})
 
-        # 1) RAG Trigger
+        # ----------------------------------------------------
+        # 1) RAG TRIGGER — FIRST PRIORITY (fix for room types)
+        # ----------------------------------------------------
+        rag_keywords = [
+            "room", "rooms", "room type", "room types", "amenities", "features",
+            "summary", "pdf", "document", "information", "details",
+            "policy", "faq", "hotel", "rules"
+        ]
+
         if len(st.session_state.rag.chunks) > 0:
-            rag_keywords = ["pdf", "document", "summary", "policy", "faq", "hotel", "rules", "information"]
-            if any(k in final_text for k in rag_keywords):
-                 # Answer from PDF
+            # Trigger RAG for any informational query
+            if "?" in user_msg or any(k in user_msg for k in rag_keywords):
                 answer = st.session_state.rag.query(new_input)
                 st.session_state.chat.append({"role": "assistant", "content": answer})
                 st.rerun()
 
-        # 2) Booking flow
+        # ----------------------------------------------------
+        # 2) BOOKING FLOW
+        # ----------------------------------------------------
         if start_booking_flow(new_input) or st.session_state.booking_in_progress:
             resp = handle_booking_turn(new_input)
             st.session_state.chat.append({"role": "assistant", "content": resp})
             st.rerun()
 
-        # 3) LLM fallback
+        # ----------------------------------------------------
+        # 3) LLM FALLBACK
+        # ----------------------------------------------------
         reply = generate_answer(st.session_state.llm_client, st.session_state.chat)
         st.session_state.chat.append({"role": "assistant", "content": reply})
         st.rerun()
