@@ -1,7 +1,7 @@
 streamlit>=1.30.0
 python-dotenv
 faiss-cpu
-PyPDF2
+pdfplumber
 pandas
 pillow
 pdf2image
@@ -9,9 +9,3 @@ pytesseract
 openai
 groq
 markdown
-numpy<2.0
-torch==2.0.1
-sentence-transformers==2.2.2
-huggingface-hub==0.19.4
-transformers==4.30.2
-pdfplumber
