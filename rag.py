@@ -4,17 +4,16 @@ import numpy as np
 import pdfplumber
 import streamlit as st
 from typing import List
-
 from groq import Groq
 
-# Groq model
+# Groq embedding model
 EMB_MODEL = "nomic-embed-text"
 
-
-# Load Groq client
+# Initialize Groq Client
 groq_key = st.secrets.get("GROQ_API_KEY", None)
 if not groq_key:
     st.error("❌ Missing GROQ_API_KEY in Streamlit Secrets.")
+
 client = Groq(api_key=groq_key)
 
 
@@ -30,7 +29,7 @@ def get_embedding(text: str) -> np.ndarray:
         return np.array(res.data[0].embedding)
     except Exception as e:
         st.error(f"Embedding error: {e}")
-        return np.zeros(768)   # safe fallback
+        return np.zeros(768)
 
 
 # -------------------------------
@@ -42,7 +41,7 @@ def chunk_text(text: str, chunk_size: int = 300) -> List[str]:
 
 
 # -------------------------------
-# Extract PDF text
+# Extract text from PDF
 # -------------------------------
 def extract_pdf_text(pdf_file) -> str:
     try:
@@ -69,26 +68,25 @@ class RAGStore:
     def add_pdf(self, pdf_file):
         text = extract_pdf_text(pdf_file)
         if not text:
-            st.error("PDF contains no text.")
+            st.error("PDF contains no readable text.")
             return
 
         chunks = chunk_text(text)
-        self.chunks.extend(chunks)
+        self.chunks = chunks
+        self.embeddings = []
 
-        # create embeddings
         for chunk in chunks:
             emb = get_embedding(chunk)
             self.embeddings.append(emb)
 
-        st.success(f"PDF uploaded — {len(chunks)} chunks added.")
+        st.success(f"PDF processed — {len(chunks)} chunks added.")
 
     def query(self, question: str) -> str:
         if not self.embeddings:
-            return "No documents uploaded yet."
+            return "No PDF loaded yet."
 
         q_emb = get_embedding(question)
 
-        # cosine similarity
         sims = [
             np.dot(q_emb, e) / (np.linalg.norm(q_emb) * np.linalg.norm(e))
             for e in self.embeddings
