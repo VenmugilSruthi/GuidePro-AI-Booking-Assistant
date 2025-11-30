@@ -32,7 +32,6 @@ def get_embedding_safe(text: str):
         return emb
 
     except Exception as e:
-        # DO NOT CRASH → Return None instead
         print("Embedding error:", e)
         return None
 
@@ -57,9 +56,6 @@ class RAGStore:
         self.embeddings: List[np.ndarray] = []
         self.text_chunks: List[str] = []
 
-    # -------------------------------
-    # ADD DOCUMENTS
-    # -------------------------------
     def add_documents(self, uploaded_files):
         if uploaded_files is None:
             return
@@ -81,7 +77,6 @@ class RAGStore:
                 print("PDF read error:", e)
                 continue
 
-            # If PDF contains NO text → skip
             if not full_text:
                 continue
 
@@ -93,27 +88,20 @@ class RAGStore:
                     self.embeddings.append(emb)
                     self.text_chunks.append(ch)
 
-    # -------------------------------
-    # Chunk text small + safe
-    # -------------------------------
     def chunk_text(self, text: str):
         words = text.split()
         chunks = []
 
-        size = 150  # SMALL chunks
+        size = 150  # small chunks
 
         for i in range(0, len(words), size):
             chunk = " ".join(words[i:i + size]).strip()
             if chunk:
-                # enforce character limit
                 chunk = chunk[:1500]
                 chunks.append(chunk)
 
         return chunks
 
-    # -------------------------------
-    # QUERY
-    # -------------------------------
     def query(self, question: str, top_k: int = 3):
         if not self.embeddings:
             return "No documents indexed yet. Upload a PDF to enable RAG."
