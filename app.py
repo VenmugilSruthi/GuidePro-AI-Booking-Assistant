@@ -197,11 +197,14 @@ if page == "Chat Assistant":
         # -----------------------------
         # 2️⃣ BOOKING FLOW
         # -----------------------------
+        # 2️⃣ BOOKING FLOW - FIXED
         if not used_rag:
-            if start_booking_flow(final_text) or st.session_state.booking_in_progress:
-                reply = handle_booking_turn(final_text)
-                st.session_state.chat.append({"role": "assistant", "content": reply})
+            if st.session_state.booking_in_progress or start_booking_flow(final_text):
+                st.session_state.booking_in_progress = True
+                resp = handle_booking_turn(final_text)
+                st.session_state.chat.append({"role": "assistant", "content": resp})
                 st.rerun()
+
 
         # -----------------------------
         # 3️⃣ LLM FALLBACK (FIXED)
@@ -250,3 +253,4 @@ elif page == "Admin":
 elif page == "About":
     st.header("About GuidePro AI")
     st.write("Your smart AI travelling assistant.")
+
