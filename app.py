@@ -182,56 +182,61 @@ if page == "Chat Assistant":
     if new_input:
         final_text = new_input
 
+    # ------------------------------------------------------
+    # MAIN LOGIC: RAG → BOOKING → LLM
+    # ------------------------------------------------------
     if final_text:
         user_lower = final_text.lower()
         st.session_state.chat.append({"role": "user", "content": final_text})
 
-        # -----------------------------
-        # 1️⃣ IMPROVED RAG TRIGGER
-        # -----------------------------
         used_rag = False
-
         rag_available = len(st.session_state.rag.embeddings) > 0
 
-        rag_keywords = [
-            "pdf", "document", "cancel", "reschedule", "insurance",
-            "travel", "policy", "refund", "faq", "rules", "trip"
+        # -------------------------------------
+        # 1️⃣ IMPROVED RAG DETECTION
+        # -------------------------------------
+        informational_keywords = [
+            "what", "how", "when", "where", "why", "policy", "rules",
+            "documents", "requirements", "timings", "check-in", "check out",
+            "insurance", "cancellation", "information", "details", "faq"
         ]
 
-        keyword_hit = any(k in user_lower for k in rag_keywords)
+        is_question = (
+            final_text.endswith("?") or
+            any(k in user_lower for k in informational_keywords)
+        )
 
-        semantic_trigger = len(final_text.split()) > 6
-
-        if rag_available and (keyword_hit or semantic_trigger):
+        if rag_available and is_question:
             ans = st.session_state.rag.query(final_text)
-            st.session_state.chat.append({"role": "assistant", "content": ans})
+            st.session_state.chat.append({
+                "role": "assistant",
+                "content": ans
+            })
             used_rag = True
 
+        # -------------------------------------
+        # 2️⃣ BOOKING FLOW (ONLY IF USER SAYS BOOK)
+        # -------------------------------------
+        booking_keywords = ["book", "reservation", "reserve"]
 
-        # -----------------------------
-        # 2️⃣ BOOKING FLOW
-        # -----------------------------
+        is_booking = any(k in user_lower for k in booking_keywords)
+
         if not used_rag:
-            booking_keywords = ["book", "room", "hotel", "reservation", "check-in"]
-            is_booking = any(k in user_lower for k in booking_keywords)
-
             if is_booking or st.session_state.booking_in_progress:
                 st.session_state.booking_in_progress = True
                 resp = handle_booking_turn(final_text)
                 st.session_state.chat.append({"role": "assistant", "content": resp})
                 st.rerun()
 
-
-        # -----------------------------
+        # -------------------------------------
         # 3️⃣ LLM FALLBACK
-        # -----------------------------
+        # -------------------------------------
         if not used_rag:
-            try:
-                reply = generate_answer(st.session_state.llm_client, st.session_state.chat)
-            except Exception as e:
-                reply = f"🔥 LLM ERROR:\n{str(e)}"
-
-            st.session_state.chat.append({"role": "assistant", "content": reply})
+            reply = generate_answer(st.session_state.llm_client, st.session_state.chat)
+            st.session_state.chat.append({
+                "role": "assistant",
+                "content": reply
+            })
 
         st.rerun()
 
