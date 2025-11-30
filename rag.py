@@ -1,54 +1,80 @@
 import numpy as np
 import faiss
 import pdfplumber
-from PyPDF2 import PdfReader
+from groq import Groq
+import os
 
-EMB_SIZE = 384  # dimensionality for MiniLM embeddings
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+EMB_MODEL = "text-embedding-3-small"
 
-
-def extract_text_from_pdf(file):
-    """Extract PDF text safely using pdfplumber OR PyPDF2 fallback."""
-    try:
-        with pdfplumber.open(file) as pdf:
-            pages = [page.extract_text() or "" for page in pdf.pages]
-            return "\n".join(pages)
-    except:
-        reader = PdfReader(file)
-        pages = [page.extract_text() or "" for page in reader.pages]
-        return "\n".join(pages)
-
-
-def simple_embedding(text: str):
-    """
-    Fake embedding (384D) so Streamlit never crashes.
-    Replace later with Groq/OpenAI embeddings if needed.
-    """
-    arr = np.random.rand(EMB_SIZE).astype("float32")
-    return arr
+# ---------------------------------------------
+# Get embedding from Groq
+# ---------------------------------------------
+def get_embedding(text):
+    resp = client.embeddings.create(
+        model=EMB_MODEL,
+        input=text
+    )
+    return resp.data[0].embedding
 
 
+# ---------------------------------------------
+# Chunk text for better RAG accuracy
+# ---------------------------------------------
+def chunk_text(text, max_len=400):
+    words = text.split()
+    chunks = []
+    current = []
+
+    for w in words:
+        current.append(w)
+        if len(current) >= max_len:
+            chunks.append(" ".join(current))
+            current = []
+
+    if current:
+        chunks.append(" ".join(current))
+    return chunks
+
+
+# ---------------------------------------------
+# RAG Store Class
+# ---------------------------------------------
 class RAGStore:
+
     def __init__(self):
-        self.index = faiss.IndexFlatL2(EMB_SIZE)
-        self.docs = []
+        self.dimension = 1536
+        self.index = faiss.IndexFlatL2(self.dimension)
+        self.chunks = []
 
-    def add_documents(self, uploaded_files):
-        """Accept list of UploadedFile objects → extract text → index."""
-        for file in uploaded_files:
-            text = extract_text_from_pdf(file)
-            if not text.strip():
-                continue
+    # -----------------------------------------
+    # Read & store uploaded PDFs
+    # -----------------------------------------
+    def add_documents(self, files):
+        for f in files:
+            with pdfplumber.open(f) as pdf:
+                full_text = ""
+                for page in pdf.pages:
+                    full_text += page.extract_text() + "\n"
 
-            emb = simple_embedding(text)
-            self.index.add(np.array([emb]))
-            self.docs.append(text)
+            # Create chunks
+            split_chunks = chunk_text(full_text)
 
-    def query(self, query_text, top_k=1):
-        """Return best‐matching document snippet."""
-        if len(self.docs) == 0:
-            return "No relevant information found in uploaded PDFs."
+            # Add embeddings
+            for c in split_chunks:
+                emb = np.array(get_embedding(c)).astype("float32")
+                self.index.add(np.array([emb]))
+                self.chunks.append(c)
 
-        q_emb = simple_embedding(query_text).reshape(1, -1)
+    # -----------------------------------------
+    # Search for relevant text
+    # -----------------------------------------
+    def query(self, question, top_k=2):
+        q_emb = np.array(get_embedding(question)).astype("float32").reshape(1, -1)
         D, I = self.index.search(q_emb, top_k)
-        best_idx = I[0][0]
-        return self.docs[best_idx][:1000]  # return top snippet
+
+        results = [self.chunks[i] for i in I[0] if i < len(self.chunks)]
+        if not results:
+            return "No relevant information found."
+
+        return "\n\n".join(results)
