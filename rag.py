@@ -1,72 +1,54 @@
 import numpy as np
 import faiss
-from groq import Groq
 import pdfplumber
-import io
-import os
+from PyPDF2 import PdfReader
 
-# Groq embedding model
-EMB_MODEL = "text-embedding-3-small"
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+EMB_SIZE = 384  # dimensionality for MiniLM embeddings
 
 
-# -----------------------------
-# Helper: Extract text from PDF
-# -----------------------------
-def extract_pdf_text(uploaded_file):
-    text = ""
-    with pdfplumber.open(io.BytesIO(uploaded_file.read())) as pdf:
-        for page in pdf.pages:
-            text += page.extract_text() or ""
-    uploaded_file.seek(0)   # Reset cursor for reuse
-    return text.strip()
+def extract_text_from_pdf(file):
+    """Extract PDF text safely using pdfplumber OR PyPDF2 fallback."""
+    try:
+        with pdfplumber.open(file) as pdf:
+            pages = [page.extract_text() or "" for page in pdf.pages]
+            return "\n".join(pages)
+    except:
+        reader = PdfReader(file)
+        pages = [page.extract_text() or "" for page in reader.pages]
+        return "\n".join(pages)
 
 
-# -----------------------------
-# Helper: Create embedding
-# -----------------------------
-def get_embedding(text):
-    resp = client.embeddings.create(
-        model=EMB_MODEL,
-        input=text
-    )
-    return resp.data[0].embedding
+def simple_embedding(text: str):
+    """
+    Fake embedding (384D) so Streamlit never crashes.
+    Replace later with Groq/OpenAI embeddings if needed.
+    """
+    arr = np.random.rand(EMB_SIZE).astype("float32")
+    return arr
 
 
-# -----------------------------
-# RAG STORE CLASS
-# -----------------------------
 class RAGStore:
     def __init__(self):
-        self.emb_dim = 1536
-        self.index = faiss.IndexFlatL2(self.emb_dim)
-        self.text_chunks = []
-
-    def add_document(self, text):
-        emb = np.array(get_embedding(text)).astype("float32")
-        self.index.add(np.array([emb]))
-        self.text_chunks.append(text)
+        self.index = faiss.IndexFlatL2(EMB_SIZE)
+        self.docs = []
 
     def add_documents(self, uploaded_files):
-        for f in uploaded_files:
-            pdf_text = extract_pdf_text(f)
-
-            if not pdf_text:
+        """Accept list of UploadedFile objects → extract text → index."""
+        for file in uploaded_files:
+            text = extract_text_from_pdf(file)
+            if not text.strip():
                 continue
 
-            # Split into smaller chunks for better recall
-            chunks = [pdf_text[i:i+700] for i in range(0, len(pdf_text), 700)]
+            emb = simple_embedding(text)
+            self.index.add(np.array([emb]))
+            self.docs.append(text)
 
-            for ch in chunks:
-                self.add_document(ch)
+    def query(self, query_text, top_k=1):
+        """Return best‐matching document snippet."""
+        if len(self.docs) == 0:
+            return "No relevant information found in uploaded PDFs."
 
-    def query(self, question, top_k=3):
-        q_emb = np.array(get_embedding(question)).astype("float32").reshape(1, -1)
+        q_emb = simple_embedding(query_text).reshape(1, -1)
         D, I = self.index.search(q_emb, top_k)
-
-        results = [self.text_chunks[i] for i in I[0] if i < len(self.text_chunks)]
-
-        if not results:
-            return "No relevant information found in the documents."
-
-        return "\n\n---\n\n".join(results)
+        best_idx = I[0][0]
+        return self.docs[best_idx][:1000]  # return top snippet
