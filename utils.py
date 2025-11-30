@@ -1,11 +1,9 @@
 import streamlit as st
 
-# NOTE: html import is removed as we are no longer using html.escape()
-# Removing html.escape allows <b> tags in the message content for bolding.
-
 def render_chat_bubble(message, extra_css=""):
     """
-    Renders a styled chat bubble (user or bot) with appropriate alignment and an emoji.
+    Renders a styled chat bubble (user or bot) with appropriate alignment, 
+    an emoji, and converts Markdown bold (**) to HTML bold (<b>).
     
     Args:
         message (dict): A dictionary with "role" ("user" or "assistant") and "content".
@@ -13,20 +11,23 @@ def render_chat_bubble(message, extra_css=""):
     """
     role = message["role"]
     
-    # Use raw content to allow HTML formatting (like <b> for bolding)
+    # Use raw content
     content = message["content"] 
+    
+    # 🌟 FIX: Convert Markdown bold (**) to HTML bold (<b>)
+    # This is a simple replacement that works for one pair of **...** in a string.
+    content = content.replace('**', '<b>', 1).replace('**', '</b>', 1) 
 
     if role == "user":
         bubble_class = "chat-user"
         align = "flex-end"
-        # User message format: Content Only (Optional: add emoji if desired, but typically only bot has one)
-        # We will keep the content clean for the user side.
+        # 👤 User message format: Content Only
         rendered_content = content
     else:
         bubble_class = "chat-bot"
         align = "flex-start"
         
-        # Bot message format: Bot Emoji + Content (including <b> for bolded prompts)
+        # 🤖 Bot message format: Bot Emoji + Content (now correctly bolded)
         emoji = "🤖" 
         rendered_content = f"{emoji} {content}"
 
@@ -41,7 +42,3 @@ def render_chat_bubble(message, extra_css=""):
         </div>
     </div>
     """, unsafe_allow_html=True)
-
-# Important Note: To see the bolding (e.g., **full name**), 
-# the source that generates the message must now use HTML tags:
-# e.g., "What is your **<b>full name</b>**?"
