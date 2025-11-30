@@ -25,7 +25,7 @@ st.set_page_config(
 
 
 # ----------------------------------------------------------
-# PREMIUM UI (same as your original)
+# PREMIUM UI
 # ----------------------------------------------------------
 st.markdown("""
 <style>
@@ -62,7 +62,6 @@ html, body, [class*="css"] {
     background-size: cover;
     background-position: center;
     border-radius: 0px;
-    position: relative;
     margin: -60px 0 0 0;
 }
 
@@ -83,55 +82,10 @@ html, body, [class*="css"] {
     font-size: 48px;
     font-weight: 900;
     color: #1f2e4b;
-    margin-bottom: 10px;
 }
 .hero-sub {
     font-size: 20px;
     color: #2c3e50;
-}
-
-.chat-user {
-    background: #d6e5ff;
-    padding: 12px 18px;
-    border-radius: 14px 14px 4px 14px;
-    margin-bottom: 12px;
-    color: #003060;
-    font-size: 16px;
-    max-width: 75%;
-}
-.chat-bot {
-    background: white;
-    padding: 12px 18px;
-    border-radius: 14px 14px 14px 4px;
-    margin-bottom: 12px;
-    border: 1px solid #ececec;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.08);
-    font-size: 16px;
-    max-width: 75%;
-}
-
-.fixed-input-container {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    padding: 10px;
-    background: white;
-    border-top: 1px solid #e1e1e1;
-    z-index: 2000;
-}
-.stChatInput > div > div > input {
-    border-radius: 12px !important;
-    border: 2px solid #bad2ff !important;
-    padding: 12px !important;
-}
-.stChatInputContainer {
-    max-width: 100%;
-    margin: 0 auto;
-}
-.stChatInput {
-    padding: 30px 50px;
-    font-size: 16px;
 }
 
 </style>
@@ -139,7 +93,7 @@ html, body, [class*="css"] {
 
 
 # ----------------------------------------------------------
-# INITIALIZE STATE
+# INITIALIZE SESSION STATE
 # ----------------------------------------------------------
 init_db()
 
@@ -177,15 +131,14 @@ with st.sidebar:
 
 
 # ----------------------------------------------------------
-# LLM FALLBACK
+# LLM CALL — NOW WITH PROPER ERROR REPORTING
 # ----------------------------------------------------------
 def call_llm_system(messages):
     client = st.session_state.llm_client
     try:
         return generate_answer(client, messages)
-    except:
-        last_user = next((m for m in reversed(messages) if m["role"] == "user"), None)
-        return st.session_state.rag.query(last_user["content"])
+    except Exception as e:
+        return f"🔥 LLM ERROR:\n{str(e)}"
 
 
 # ----------------------------------------------------------
@@ -220,9 +173,7 @@ if page == "Chat Assistant":
 
     st.markdown("---")
 
-    st.markdown('<div class="fixed-input-container">', unsafe_allow_html=True)
     new_input = st.chat_input("Type your message…")
-    st.markdown('</div>', unsafe_allow_html=True)
 
     if new_input:
         final_text = new_input
@@ -232,11 +183,11 @@ if page == "Chat Assistant":
         st.session_state.chat.append({"role": "user", "content": final_text})
 
         # -----------------------------
-        # 1️⃣ RAG (only when relevant)
+        # 1️⃣ RAG CHECK
         # -----------------------------
         rag_keywords = ["pdf", "document", "summary", "summarize", "faq", "from pdf"]
-
         used_rag = False
+
         if len(st.session_state.rag.embeddings) > 0:
             if any(k in user_msg for k in rag_keywords):
                 ans = st.session_state.rag.query(final_text)
@@ -244,32 +195,33 @@ if page == "Chat Assistant":
                 used_rag = True
 
         # -----------------------------
-        # 2️⃣ Booking flow
+        # 2️⃣ BOOKING FLOW
         # -----------------------------
         if not used_rag:
             if start_booking_flow(final_text) or st.session_state.booking_in_progress:
                 resp = handle_booking_turn(final_text)
-                st.session_state.chat.append(
-                    {"role": "assistant", "content": resp}
-                )
+                st.session_state.chat.append({"role": "assistant", "content": resp})
                 st.rerun()
 
         # -----------------------------
-        # 3️⃣ LLM fallback
+        # 3️⃣ LLM FALLBACK (FIXED)
         # -----------------------------
         if not used_rag:
-            reply = generate_answer(st.session_state.llm_client, st.session_state.chat)
+            try:
+                reply = generate_answer(st.session_state.llm_client, st.session_state.chat)
+            except Exception as e:
+                reply = f"🔥 LLM ERROR:\n{str(e)}"
+
             st.session_state.chat.append({"role": "assistant", "content": reply})
 
         st.rerun()
 
 
 # ----------------------------------------------------------
-# OTHER PAGES (unchanged)
+# OTHER PAGES
 # ----------------------------------------------------------
 elif page == "Trip Planner":
     st.header("Trip Planner")
-    st.write("Plan your perfect vacation with AI.")
     trip_type = st.selectbox("Trip Type", ["Beach", "City", "Mountain", "International"])
     guests = st.number_input("Guests", 1, 20, 2)
     destination = st.text_input("Destination")
@@ -303,5 +255,4 @@ elif page == "Admin":
 elif page == "About":
     st.header("About GuidePro AI")
     st.write("Your smart AI travelling assistant.")
-
 
