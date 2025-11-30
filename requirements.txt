@@ -1,8 +1,7 @@
 streamlit>=1.30.0
 python-dotenv
 sentence-transformers==2.2.2
-torch==2.0.1
-faiss-cpu==1.7.4
+faiss-cpu
 PyPDF2
 pandas
 pillow
