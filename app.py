@@ -92,6 +92,7 @@ html, body, [class*="css"] {
 """, unsafe_allow_html=True)
 
 
+
 # ----------------------------------------------------------
 # INITIALIZE SESSION STATE
 # ----------------------------------------------------------
@@ -113,16 +114,6 @@ if "booking_in_progress" not in st.session_state:
     st.session_state.booking_in_progress = False
 
 
-# ----------------------------------------------------------
-# LLM WRAPPER
-# ----------------------------------------------------------
-def call_llm(messages):
-    try:
-        short_messages = messages[-6:]          # SAFE LIMIT
-        return generate_answer(st.session_state.llm_client, short_messages)
-    except Exception as e:
-        return f"🔥 LLM ERROR:\n{str(e)}"
-
 
 # ----------------------------------------------------------
 # SIDEBAR
@@ -130,7 +121,8 @@ def call_llm(messages):
 with st.sidebar:
     st.markdown("<div class='sidebar-title'>GuidePro AI</div>", unsafe_allow_html=True)
 
-    page = st.radio("Navigate", ["Chat Assistant", "Trip Planner", "Hotels Browser", "Admin", "About"])
+    page = st.radio("Navigate",
+                    ["Chat Assistant", "Trip Planner", "Hotels Browser", "Admin", "About"])
 
     st.markdown("<div class='sidebar-section'>Upload PDFs for RAG</div>", unsafe_allow_html=True)
 
@@ -138,6 +130,19 @@ with st.sidebar:
     if uploaded:
         st.session_state.rag.add_documents(uploaded)
         st.success("PDF(s) indexed successfully!")
+
+
+
+# ----------------------------------------------------------
+# LLM CALL WRAPPER
+# ----------------------------------------------------------
+def call_llm_system(messages):
+    client = st.session_state.llm_client
+    try:
+        return generate_answer(client, messages)
+    except Exception as e:
+        return f"🔥 LLM ERROR:\n{str(e)}"
+
 
 
 # ----------------------------------------------------------
@@ -163,11 +168,9 @@ if page == "Chat Assistant":
     with col1:
         if st.button("🗺️ Plan Trip"):
             final_text = "I want to plan a trip"
-
     with col2:
         if st.button("🏨 Book Hotel"):
             final_text = "I want to book a hotel"
-
     with col3:
         if st.button("❓ Ask Question"):
             final_text = "I have a travel question"
@@ -175,6 +178,7 @@ if page == "Chat Assistant":
     st.markdown("---")
 
     new_input = st.chat_input("Type your message…")
+
     if new_input:
         final_text = new_input
 
@@ -183,23 +187,35 @@ if page == "Chat Assistant":
         st.session_state.chat.append({"role": "user", "content": final_text})
 
         # -----------------------------
-        # 1️⃣ RAG
+        # 1️⃣ IMPROVED RAG TRIGGER
         # -----------------------------
-        rag_keywords = ["pdf", "document", "faq", "policy", "travel"]
         used_rag = False
 
-        if len(st.session_state.rag.embeddings) > 0:
-            if any(k in user_lower for k in rag_keywords):
-                ans = st.session_state.rag.query(final_text)
-                st.session_state.chat.append({"role": "assistant", "content": ans})
-                used_rag = True
+        rag_available = len(st.session_state.rag.embeddings) > 0
+
+        rag_keywords = [
+            "pdf", "document", "cancel", "reschedule", "insurance",
+            "travel", "policy", "refund", "faq", "rules", "trip"
+        ]
+
+        keyword_hit = any(k in user_lower for k in rag_keywords)
+
+        semantic_trigger = len(final_text.split()) > 6
+
+        if rag_available and (keyword_hit or semantic_trigger):
+            ans = st.session_state.rag.query(final_text)
+            st.session_state.chat.append({"role": "assistant", "content": ans})
+            used_rag = True
+
 
         # -----------------------------
         # 2️⃣ BOOKING FLOW
         # -----------------------------
-        # 2️⃣ BOOKING FLOW - FIXED
         if not used_rag:
-            if st.session_state.booking_in_progress or start_booking_flow(final_text):
+            booking_keywords = ["book", "room", "hotel", "reservation", "check-in"]
+            is_booking = any(k in user_lower for k in booking_keywords)
+
+            if is_booking or st.session_state.booking_in_progress:
                 st.session_state.booking_in_progress = True
                 resp = handle_booking_turn(final_text)
                 st.session_state.chat.append({"role": "assistant", "content": resp})
@@ -207,12 +223,18 @@ if page == "Chat Assistant":
 
 
         # -----------------------------
-        # 3️⃣ LLM FALLBACK (FIXED)
+        # 3️⃣ LLM FALLBACK
         # -----------------------------
         if not used_rag:
-            reply = call_llm(st.session_state.chat)
+            try:
+                reply = generate_answer(st.session_state.llm_client, st.session_state.chat)
+            except Exception as e:
+                reply = f"🔥 LLM ERROR:\n{str(e)}"
+
             st.session_state.chat.append({"role": "assistant", "content": reply})
-            st.rerun()
+
+        st.rerun()
+
 
 
 # ----------------------------------------------------------
@@ -225,7 +247,7 @@ elif page == "Trip Planner":
     destination = st.text_input("Destination")
     if st.button("Generate Itinerary"):
         query = f"Create a detailed 3-day {trip_type} trip itinerary for {guests} guests to {destination}."
-        reply = call_llm([{"role": "user", "content": query}])
+        reply = call_llm_system([{"role": "user", "content": query}])
         st.write(reply)
 
 elif page == "Hotels Browser":
@@ -253,4 +275,3 @@ elif page == "Admin":
 elif page == "About":
     st.header("About GuidePro AI")
     st.write("Your smart AI travelling assistant.")
-
