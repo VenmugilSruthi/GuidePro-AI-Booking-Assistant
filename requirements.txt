@@ -1,13 +1,7 @@
-streamlit>=1.32
+streamlit>=1.30.0
 python-dotenv
-faiss-cpu
+groq
+numpy
 pdfplumber
 pandas
-pillow
-pdf2image
-pytesseract
-openai
-groq
 markdown
-sentence-transformers==2.2.2
-torch
