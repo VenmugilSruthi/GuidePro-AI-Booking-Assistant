@@ -1,29 +1,41 @@
-import numpy as np
+import os
 import faiss
-from sentence_transformers import SentenceTransformer
+import numpy as np
+from groq import Groq
 
-EMB_MODEL = "all-MiniLM-L6-v2"   # local embedding model (384 dim)
+# Groq embedding model
+EMB_MODEL = "text-embedding-3-small"
+
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+
+def get_embedding(text):
+    """Returns embedding vector from Groq API"""
+    resp = client.embeddings.create(
+        model=EMB_MODEL,
+        input=text
+    )
+    return resp.data[0].embedding
+
 
 class RAGStore:
     def __init__(self):
-        self.model = SentenceTransformer(EMB_MODEL)
-        self.index = faiss.IndexFlatL2(384)  # embedding dimension = 384
+        # Dimension of Groq embedding (1536)
+        self.index = faiss.IndexFlatL2(1536)
         self.text_chunks = []
 
-    def get_embedding(self, text: str):
-        emb = self.model.encode([text], convert_to_numpy=True)
-        return emb[0]
-
-    def add_document(self, text: str):
-        emb = self.get_embedding(text).astype("float32")
+    def add_document(self, text):
+        """Add a single text chunk"""
+        emb = np.array(get_embedding(text)).astype("float32")
         self.index.add(np.array([emb]))
         self.text_chunks.append(text)
 
-    def add_documents(self, docs):
-        for d in docs:
-            self.add_document(str(d))
+    def add_documents(self, list_of_texts):
+        """Add list of text chunks"""
+        for t in list_of_texts:
+            self.add_document(str(t))
 
     def search(self, query, top_k=3):
-        q_emb = self.get_embedding(query).astype("float32").reshape(1, -1)
+        """Search relevant chunks"""
+        q_emb = np.array(get_embedding(query)).astype("float32").reshape(1, -1)
         D, I = self.index.search(q_emb, top_k)
         return [self.text_chunks[i] for i in I[0]]
