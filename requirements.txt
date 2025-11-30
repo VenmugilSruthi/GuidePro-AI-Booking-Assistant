@@ -9,3 +9,4 @@ pytesseract
 openai
 groq
 markdown
+sentence-transformers
