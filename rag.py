@@ -1,80 +1,50 @@
 import numpy as np
 import faiss
 import pdfplumber
-from groq import Groq
-import os
 
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-EMB_MODEL = "text-embedding-3-small"
-
-# ---------------------------------------------
-# Get embedding from Groq
-# ---------------------------------------------
-def get_embedding(text):
-    resp = client.embeddings.create(
-        model=EMB_MODEL,
-        input=text
-    )
-    return resp.data[0].embedding
+# Very lightweight local embedding — NO Groq, NO HF
+def embed(text):
+    text = text.lower()
+    vec = np.zeros(300, dtype="float32")
+    for word in text.split():
+        for i, ch in enumerate(word[:30]):
+            vec[i % 300] += ord(ch)
+    return vec / np.linalg.norm(vec)
 
 
-# ---------------------------------------------
-# Chunk text for better RAG accuracy
-# ---------------------------------------------
-def chunk_text(text, max_len=400):
-    words = text.split()
-    chunks = []
-    current = []
-
-    for w in words:
-        current.append(w)
-        if len(current) >= max_len:
-            chunks.append(" ".join(current))
-            current = []
-
-    if current:
-        chunks.append(" ".join(current))
-    return chunks
-
-
-# ---------------------------------------------
-# RAG Store Class
-# ---------------------------------------------
 class RAGStore:
-
     def __init__(self):
-        self.dimension = 1536
-        self.index = faiss.IndexFlatL2(self.dimension)
+        self.index = faiss.IndexFlatL2(300)
         self.chunks = []
 
-    # -----------------------------------------
-    # Read & store uploaded PDFs
-    # -----------------------------------------
+    def _extract_text_from_pdf(self, file):
+        text = ""
+        try:
+            with pdfplumber.open(file) as pdf:
+                for page in pdf.pages:
+                    text += page.extract_text() + "\n"
+        except:
+            pass
+        return text
+
+    def _split_chunks(self, text, size=350):
+        words = text.split()
+        chunks = []
+        for i in range(0, len(words), size):
+            chunks.append(" ".join(words[i:i+size]))
+        return chunks
+
     def add_documents(self, files):
         for f in files:
-            with pdfplumber.open(f) as pdf:
-                full_text = ""
-                for page in pdf.pages:
-                    full_text += page.extract_text() + "\n"
+            pdf_text = self._extract_text_from_pdf(f)
+            chunks = self._split_chunks(pdf_text)
 
-            # Create chunks
-            split_chunks = chunk_text(full_text)
-
-            # Add embeddings
-            for c in split_chunks:
-                emb = np.array(get_embedding(c)).astype("float32")
+            for c in chunks:
+                emb = embed(c)
                 self.index.add(np.array([emb]))
                 self.chunks.append(c)
 
-    # -----------------------------------------
-    # Search for relevant text
-    # -----------------------------------------
-    def query(self, question, top_k=2):
-        q_emb = np.array(get_embedding(question)).astype("float32").reshape(1, -1)
+    def query(self, question, top_k=1):
+        q_emb = embed(question).reshape(1, -1)
         D, I = self.index.search(q_emb, top_k)
-
-        results = [self.chunks[i] for i in I[0] if i < len(self.chunks)]
-        if not results:
-            return "No relevant information found."
-
-        return "\n\n".join(results)
+        return self.chunks[I[0][0]]
