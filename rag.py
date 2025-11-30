@@ -3,34 +3,26 @@
 import numpy as np
 import pdfplumber
 import streamlit as st
+from sentence_transformers import SentenceTransformer
 from typing import List
-from groq import Groq
-
-# Groq embedding model
-EMB_MODEL = "nomic-embed-text-v1.5"
-
-
-# Initialize Groq Client
-groq_key = st.secrets.get("GROQ_API_KEY", None)
-if not groq_key:
-    st.error("❌ Missing GROQ_API_KEY in Streamlit Secrets.")
-
-client = Groq(api_key=groq_key)
-
 
 # -------------------------------
-# Embedding Function (Groq Only)
+# Local Embedding Model
 # -------------------------------
+@st.cache_resource
+def load_local_model():
+    return SentenceTransformer("all-MiniLM-L6-v2")
+
+local_model = load_local_model()
+
+
 def get_embedding(text: str) -> np.ndarray:
+    """Generate embeddings using local SentenceTransformer."""
     try:
-        res = client.embeddings.create(
-            model=EMB_MODEL,
-            input=text
-        )
-        return np.array(res.data[0].embedding)
+        return local_model.encode(text)
     except Exception as e:
-        st.error(f"Embedding error: {e}")
-        return np.zeros(768)
+        st.error(f"Local embedding error: {e}")
+        return np.zeros(384)
 
 
 # -------------------------------
@@ -42,7 +34,7 @@ def chunk_text(text: str, chunk_size: int = 300) -> List[str]:
 
 
 # -------------------------------
-# Extract text from PDF
+# Extract PDF text
 # -------------------------------
 def extract_pdf_text(pdf_file) -> str:
     try:
@@ -67,6 +59,7 @@ class RAGStore:
         self.embeddings = []
 
     def add_pdf(self, pdf_file):
+        """Load PDF → extract text → chunk → embed."""
         text = extract_pdf_text(pdf_file)
         if not text:
             st.error("PDF contains no readable text.")
@@ -83,8 +76,9 @@ class RAGStore:
         st.success(f"PDF processed — {len(chunks)} chunks added.")
 
     def query(self, question: str) -> str:
+        """Return the most relevant PDF chunk."""
         if not self.embeddings:
-            return "No PDF loaded yet."
+            return "No PDF uploaded yet."
 
         q_emb = get_embedding(question)
 
@@ -95,4 +89,3 @@ class RAGStore:
 
         best_idx = int(np.argmax(sims))
         return self.chunks[best_idx]
-
