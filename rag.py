@@ -5,63 +5,36 @@ import pdfplumber
 import streamlit as st
 from typing import List
 
-# Groq + fallback local embeddings
-try:
-    from groq import Groq
-except:
-    Groq = None
+from groq import Groq
 
-from sentence_transformers import SentenceTransformer
+# Groq model
+EMB_MODEL = "nomic-embed-text"
 
 
-# -------------------------------
-# CONFIG
-# -------------------------------
-GROQ_MODEL = "nomic-embed-text"     # Groq embedding model
-LOCAL_MODEL_NAME = "all-MiniLM-L6-v2"  # Fallback model
-
-
-# -------------------------------
-# Initialize Clients
-# -------------------------------
+# Load Groq client
 groq_key = st.secrets.get("GROQ_API_KEY", None)
-client = None
-
-if groq_key and Groq:
-    client = Groq(api_key=groq_key)
-
-local_model = SentenceTransformer(LOCAL_MODEL_NAME)
+if not groq_key:
+    st.error("❌ Missing GROQ_API_KEY in Streamlit Secrets.")
+client = Groq(api_key=groq_key)
 
 
 # -------------------------------
-# Embedding Function
+# Embedding Function (Groq Only)
 # -------------------------------
 def get_embedding(text: str) -> np.ndarray:
-    text = text.strip()
-
-    # ---- Try Groq first ----
-    if client:
-        try:
-            response = client.embeddings.create(
-                model=GROQ_MODEL,
-                input=text
-            )
-            return np.array(response.data[0].embedding)
-        except Exception as e:
-            st.warning(
-                f"Groq embedding failed: {e} — falling back to local embeddings."
-            )
-
-    # ---- Fallback: Local Model ----
     try:
-        return local_model.encode(text)
+        res = client.embeddings.create(
+            model=EMB_MODEL,
+            input=text
+        )
+        return np.array(res.data[0].embedding)
     except Exception as e:
-        st.error(f"Local embedding failed: {e}")
-        raise RuntimeError("No embedding method available.")
+        st.error(f"Embedding error: {e}")
+        return np.zeros(768)   # safe fallback
 
 
 # -------------------------------
-# Chunk PDF Text
+# Chunk Text
 # -------------------------------
 def chunk_text(text: str, chunk_size: int = 300) -> List[str]:
     words = text.split()
@@ -69,22 +42,24 @@ def chunk_text(text: str, chunk_size: int = 300) -> List[str]:
 
 
 # -------------------------------
-# Extract text from PDF
+# Extract PDF text
 # -------------------------------
 def extract_pdf_text(pdf_file) -> str:
     try:
         with pdfplumber.open(pdf_file) as pdf:
             text = ""
             for page in pdf.pages:
-                text += page.extract_text() + "\n"
+                t = page.extract_text()
+                if t:
+                    text += t + "\n"
         return text.strip()
     except Exception as e:
-        st.error(f"PDF reading error: {e}")
+        st.error(f"PDF read error: {e}")
         return ""
 
 
 # -------------------------------
-# RAG Store Class
+# RAG STORE
 # -------------------------------
 class RAGStore:
     def __init__(self):
@@ -94,29 +69,30 @@ class RAGStore:
     def add_pdf(self, pdf_file):
         text = extract_pdf_text(pdf_file)
         if not text:
-            st.error("PDF has no readable text.")
+            st.error("PDF contains no text.")
             return
 
         chunks = chunk_text(text)
         self.chunks.extend(chunks)
 
-        # Embed all chunks
+        # create embeddings
         for chunk in chunks:
             emb = get_embedding(chunk)
             self.embeddings.append(emb)
 
-        st.success(f"PDF processed successfully! Loaded {len(chunks)} text chunks.")
+        st.success(f"PDF uploaded — {len(chunks)} chunks added.")
 
     def query(self, question: str) -> str:
         if not self.embeddings:
-            return "No documents uploaded for RAG."
+            return "No documents uploaded yet."
 
         q_emb = get_embedding(question)
 
-        # compute cosine similarity
-        sims = [np.dot(q_emb, e) / (np.linalg.norm(q_emb) * np.linalg.norm(e)) for e in self.embeddings]
+        # cosine similarity
+        sims = [
+            np.dot(q_emb, e) / (np.linalg.norm(q_emb) * np.linalg.norm(e))
+            for e in self.embeddings
+        ]
 
         best_idx = int(np.argmax(sims))
-        best_chunk = self.chunks[best_idx]
-
-        return best_chunk
+        return self.chunks[best_idx]
