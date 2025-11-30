@@ -185,7 +185,7 @@ if page == "Chat Assistant":
         # -----------------------------
         # 1️⃣ RAG CHECK
         # -----------------------------
-        rag_keywords = ["pdf", "document", "summary", "summarize", "faq", "from pdf"]
+        rag_keywords = ["pdf", "document", "travel", "faq", "policy", "ticket", "cancel", "reschedule"]
         used_rag = False
 
         if len(st.session_state.rag.embeddings) > 0:
@@ -255,4 +255,5 @@ elif page == "Admin":
 elif page == "About":
     st.header("About GuidePro AI")
     st.write("Your smart AI travelling assistant.")
+
 
