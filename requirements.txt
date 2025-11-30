@@ -6,9 +6,6 @@ pandas
 pillow
 pdf2image
 pytesseract
-openai
 groq
 markdown
-
-
-
+sentence-transformers
