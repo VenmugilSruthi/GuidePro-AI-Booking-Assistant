@@ -135,8 +135,9 @@ if page == "Chat Assistant":
 
         # 1) RAG Trigger
         if len(st.session_state.rag.chunks) > 0:
-            rag_keywords = ["pdf", "document", "summary", "policy", "faq", "hotel", "rules"]
+            rag_keywords = ["pdf", "document", "summary", "policy", "faq", "hotel", "rules", "information"]
             if any(k in final_text for k in rag_keywords):
+                 # Answer from PDF
                 answer = st.session_state.rag.query(new_input)
                 st.session_state.chat.append({"role": "assistant", "content": answer})
                 st.rerun()
@@ -150,7 +151,6 @@ if page == "Chat Assistant":
         # 3) LLM fallback
         reply = generate_answer(st.session_state.llm_client, st.session_state.chat)
         st.session_state.chat.append({"role": "assistant", "content": reply})
-
         st.rerun()
 
 # ----------------------------------------------------------
