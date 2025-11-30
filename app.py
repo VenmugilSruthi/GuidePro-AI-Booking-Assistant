@@ -30,64 +30,31 @@ st.set_page_config(
 st.markdown("""
 <style>
 
-html, body, [class*="css"] {
-    font-family: 'Inter', sans-serif;
-}
-
-.main {
-    background: #ffffff;
-}
+html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 
 [data-testid="stSidebar"] {
     background-color: #c5d5c5;
-    border-right: 1px solid #e2e8f0;
     padding-top: 25px;
-}
-.sidebar-title {
-    font-size: 28px;
-    font-weight: 800;
-    color: #3A7AFE;
-    text-align: center;
-}
-.sidebar-section {
-    margin-top: 20px;
-    font-weight: 700;
-    color: #1F3B7F;
 }
 
 .hero-bg {
-    width: 100%;
-    height: 430px;
+    width: 100%; height: 430px;
     background-image: url('https://images.unsplash.com/photo-1506744038136-46273834b3fb');
     background-size: cover;
     background-position: center;
-    border-radius: 0px;
-    margin: -60px 0 0 0;
 }
 
 .hero-card {
     position: absolute;
-    top: 62%;
-    left: 50%;
+    top: 62%; left: 50%;
     transform: translate(-50%, -50%);
     width: 70%;
-    background: rgba(255, 255, 255, 0.45);
-    backdrop-filter: blur(8px);
+    background: rgba(255,255,255,0.45);
     padding: 30px 50px;
     border-radius: 20px;
     text-align: center;
-    box-shadow: 0px 10px 40px rgba(0,0,0,0.3);
+    backdrop-filter: blur(8px);
 }
-.hero-title {
-    font-size: 48px;
-    font-weight: 900;
-    color: #1f2e4b;
-}
-.hero-sub {
-    font-size: 20px;
-    color: #2c3e50;
-}
-
 </style>
 """, unsafe_allow_html=True)
 
@@ -134,18 +101,6 @@ with st.sidebar:
 
 
 # ----------------------------------------------------------
-# LLM CALL WRAPPER
-# ----------------------------------------------------------
-def call_llm_system(messages):
-    client = st.session_state.llm_client
-    try:
-        return generate_answer(client, messages)
-    except Exception as e:
-        return f"🔥 LLM ERROR:\n{str(e)}"
-
-
-
-# ----------------------------------------------------------
 # CHAT PAGE
 # ----------------------------------------------------------
 if page == "Chat Assistant":
@@ -162,80 +117,50 @@ if page == "Chat Assistant":
     for msg in st.session_state.chat:
         render_chat_bubble(msg)
 
-    col1, col2, col3 = st.columns(3)
-    final_text = None
-
-    with col1:
-        if st.button("🗺️ Plan Trip"):
-            final_text = "I want to plan a trip"
-    with col2:
-        if st.button("🏨 Book Hotel"):
-            final_text = "I want to book a hotel"
-    with col3:
-        if st.button("❓ Ask Question"):
-            final_text = "I have a travel question"
-
     st.markdown("---")
 
-    new_input = st.chat_input("Type your message…")
+    user_input = st.chat_input("Type your message…")
 
-    if new_input:
-        final_text = new_input
+    if user_input:
 
-    # ------------------------------------------------------
-    # MAIN LOGIC: RAG → BOOKING → LLM
-    # ------------------------------------------------------
-    if final_text:
-        user_lower = final_text.lower()
-        st.session_state.chat.append({"role": "user", "content": final_text})
+        st.session_state.chat.append({"role": "user", "content": user_input})
 
-        used_rag = False
-        rag_available = len(st.session_state.rag.embeddings) > 0
+        text = user_input.lower()
 
-        # -------------------------------------
-        # 1️⃣ IMPROVED RAG DETECTION
-        # -------------------------------------
-        informational_keywords = [
-            "what", "how", "when", "where", "why", "policy", "rules",
-            "documents", "requirements", "timings", "check-in", "check out",
-            "insurance", "cancellation", "information", "details", "faq"
-        ]
-
-        is_question = (
-            final_text.endswith("?") or
-            any(k in user_lower for k in informational_keywords)
-        )
-
-        if rag_available and is_question:
-            ans = st.session_state.rag.query(final_text)
-            st.session_state.chat.append({
-                "role": "assistant",
-                "content": ans
-            })
-            used_rag = True
-
-        # -------------------------------------
-        # 2️⃣ BOOKING FLOW (ONLY IF USER SAYS BOOK)
-        # -------------------------------------
+        # ------------------------------------------------------
+        # 1️⃣ RAG SIMILARITY CHECK (IMPROVED)
+        # Always runs if PDF exists
+        # ------------------------------------------------------
+        rag_used = False
+        if len(st.session_state.rag.embeddings) > 0:
+            rag_answer = st.session_state.rag.query(user_input)
+            # If answer comes from RAG and has similarity
+            if rag_answer and len(rag_answer.strip()) > 0:
+                rag_used = True
+                st.session_state.chat.append({
+                    "role": "assistant",
+                    "content": rag_answer
+                })
+        
+        # ------------------------------------------------------
+        # 2️⃣ BOOKING FLOW
+        # ------------------------------------------------------
         booking_keywords = ["book", "reservation", "reserve"]
 
-        is_booking = any(k in user_lower for k in booking_keywords)
+        if not rag_used and (any(k in text for k in booking_keywords) or st.session_state.booking_in_progress):
+            st.session_state.booking_in_progress = True
+            resp = handle_booking_turn(user_input)
+            st.session_state.chat.append({"role": "assistant", "content": resp})
+            st.rerun()
 
-        if not used_rag:
-            if is_booking or st.session_state.booking_in_progress:
-                st.session_state.booking_in_progress = True
-                resp = handle_booking_turn(final_text)
-                st.session_state.chat.append({"role": "assistant", "content": resp})
-                st.rerun()
-
-        # -------------------------------------
+        # ------------------------------------------------------
         # 3️⃣ LLM FALLBACK
-        # -------------------------------------
-        if not used_rag:
-            reply = generate_answer(st.session_state.llm_client, st.session_state.chat)
+        # ------------------------------------------------------
+        if not rag_used:
+            llm_reply = generate_answer(st.session_state.llm_client, st.session_state.chat)
             st.session_state.chat.append({
                 "role": "assistant",
-                "content": reply
+                "content": llm_reply
             })
 
         st.rerun()
@@ -252,7 +177,7 @@ elif page == "Trip Planner":
     destination = st.text_input("Destination")
     if st.button("Generate Itinerary"):
         query = f"Create a detailed 3-day {trip_type} trip itinerary for {guests} guests to {destination}."
-        reply = call_llm_system([{"role": "user", "content": query}])
+        reply = generate_answer(st.session_state.llm_client, [{"role": "user", "content": query}])
         st.write(reply)
 
 elif page == "Hotels Browser":
