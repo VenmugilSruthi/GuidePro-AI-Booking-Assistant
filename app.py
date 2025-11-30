@@ -1,18 +1,20 @@
+# app.py
 import os
 import streamlit as st
 from datetime import datetime
 from dotenv import load_dotenv
 load_dotenv()
 
-# local modules
+# local modules (make sure these files are present in your repo)
 from utils import render_chat_bubble
 from rag import RAGStore
 from booking_flow import start_booking_flow, handle_booking_turn
 from email_utils import send_confirmation_email
 from db import init_db, add_booking, get_bookings, delete_booking, export_bookings_csv
 from hotel_data import hotels
-from llm_utils import get_llm_client, generate_answer
 
+# LLM utils you already have (don't change unless needed)
+from llm_utils import get_llm_client, generate_answer
 
 # ----------------------------------------------------------
 # PAGE CONFIG
@@ -23,45 +25,111 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-
 # ----------------------------------------------------------
-# PREMIUM UI
+# CUSTOM STYLES (keeps UI you had)
 # ----------------------------------------------------------
 st.markdown("""
 <style>
-
-html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
-
+html, body, [class*="css"] {
+    font-family: 'Inter', sans-serif;
+}
+.main {
+    background: #ffffff;
+}
 [data-testid="stSidebar"] {
     background-color: #c5d5c5;
+    border-right: 1px solid #e2e8f0;
     padding-top: 25px;
 }
-
+.sidebar-title {
+    font-size: 28px;
+    font-weight: 800;
+    color: #3A7AFE;
+    text-align: center;
+}
+.sidebar-section {
+    margin-top: 20px;
+    font-weight: 700;
+    color: #1F3B7F;
+}
 .hero-bg {
-    width: 100%; height: 430px;
+    width: 100%;
+    height: 430px;
     background-image: url('https://images.unsplash.com/photo-1506744038136-46273834b3fb');
     background-size: cover;
     background-position: center;
+    border-radius: 0px;
+    margin: -60px 0 0 0;
 }
-
 .hero-card {
     position: absolute;
-    top: 62%; left: 50%;
+    top: 62%;
+    left: 50%;
     transform: translate(-50%, -50%);
     width: 70%;
-    background: rgba(255,255,255,0.45);
+    background: rgba(255, 255, 255, 0.45);
+    backdrop-filter: blur(8px);
     padding: 30px 50px;
     border-radius: 20px;
     text-align: center;
-    backdrop-filter: blur(8px);
+    box-shadow: 0px 10px 40px rgba(0,0,0,0.3);
+}
+.hero-title {
+    font-size: 48px;
+    font-weight: 900;
+    color: #1f2e4b;
+}
+.hero-sub {
+    font-size: 20px;
+    color: #2c3e50;
+}
+.chat-user {
+    background: #d6e5ff;
+    padding: 12px 18px;
+    border-radius: 14px 14px 4px 14px;
+    margin-bottom: 12px;
+    color: #003060;
+    font-size: 16px;
+    max-width: 75%;
+}
+.chat-bot {
+    background: white;
+    padding: 12px 18px;
+    border-radius: 14px 14px 14px 4px;
+    margin-bottom: 12px;
+    border: 1px solid #ececec;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+    font-size: 16px;
+    max-width: 75%;
+}
+.fixed-input-container {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 10px;
+    background: white;
+    border-top: 1px solid #e1e1e1;
+    z-index: 2000;
+}
+.stChatInput > div > div > input {
+    border-radius: 12px !important;
+    border: 2px solid #bad2ff !important;
+    padding: 12px !important;
+}
+.stChatInputContainer {
+    max-width: 100%;
+    margin: 0 auto;
+}
+.stChatInput {
+    padding: 30px 50px;
+    font-size: 16px;
 }
 </style>
 """, unsafe_allow_html=True)
 
-
-
 # ----------------------------------------------------------
-# INITIALIZE SESSION STATE
+# INITIALIZE STATE
 # ----------------------------------------------------------
 init_db()
 
@@ -80,8 +148,6 @@ if "llm_client" not in st.session_state:
 if "booking_in_progress" not in st.session_state:
     st.session_state.booking_in_progress = False
 
-
-
 # ----------------------------------------------------------
 # SIDEBAR
 # ----------------------------------------------------------
@@ -95,10 +161,18 @@ with st.sidebar:
 
     uploaded = st.file_uploader("Upload PDF files", type=["pdf"], accept_multiple_files=True)
     if uploaded:
+        # add_documents handles a list of UploadedFile objects
         st.session_state.rag.add_documents(uploaded)
-        st.success("PDF(s) indexed successfully!")
 
-
+# ----------------------------------------------------------
+# LLM fallback helper with clearer error handling
+# ----------------------------------------------------------
+def call_llm_system(messages):
+    client = st.session_state.llm_client
+    try:
+        return generate_answer(client, messages)
+    except Exception as e:
+        return f"🔥 ERROR FROM LLM: {e}"
 
 # ----------------------------------------------------------
 # CHAT PAGE
@@ -114,57 +188,68 @@ if page == "Chat Assistant":
         </div>
     """, unsafe_allow_html=True)
 
+    # render chat
     for msg in st.session_state.chat:
         render_chat_bubble(msg)
 
+    # quick-buttons
+    col1, col2, col3 = st.columns(3)
+    final_text = None
+
+    with col1:
+        if st.button("🗺️ Plan Trip"):
+            final_text = "I want to plan a trip"
+    with col2:
+        if st.button("🏨 Book Hotel"):
+            final_text = "I want to book a hotel"
+    with col3:
+        if st.button("❓ Ask Question"):
+            final_text = "I have a travel question"
+
     st.markdown("---")
 
-    user_input = st.chat_input("Type your message…")
+    # input
+    st.markdown('<div class="fixed-input-container">', unsafe_allow_html=True)
+    new_input = st.chat_input("Type your message…")
+    st.markdown('</div>', unsafe_allow_html=True)
 
-    if user_input:
+    if new_input:
+        final_text = new_input
 
-        st.session_state.chat.append({"role": "user", "content": user_input})
+    if final_text:
+        user_msg = final_text.lower()
+        st.session_state.chat.append({"role": "user", "content": final_text})
 
-        text = user_input.lower()
+        # 1) RAG check (only when docs exist)
+        rag_keywords = ["pdf", "document", "summary", "faq", "policy", "ticket", "cancel", "reschedule", "price", "cost"]
+        used_rag = False
+        try:
+            if len(st.session_state.rag.docs) > 0:
+                # simple trigger: keywords OR user explicitly asked about PDF/summary
+                if any(k in user_msg for k in rag_keywords) or "from pdf" in user_msg or "summarize" in user_msg or "summary" in user_msg:
+                    ans = st.session_state.rag.query(final_text)
+                    st.session_state.chat.append({"role": "assistant", "content": ans})
+                    used_rag = True
+        except Exception as e:
+            st.session_state.chat.append({"role": "assistant", "content": f"RAG error: {e}"})
+            used_rag = False
 
-        # ------------------------------------------------------
-        # 1️⃣ RAG SIMILARITY CHECK (IMPROVED)
-        # Always runs if PDF exists
-        # ------------------------------------------------------
-        rag_used = False
-        if len(st.session_state.rag.embeddings) > 0:
-            rag_answer = st.session_state.rag.query(user_input)
-            # If answer comes from RAG and has similarity
-            if rag_answer and len(rag_answer.strip()) > 0:
-                rag_used = True
-                st.session_state.chat.append({
-                    "role": "assistant",
-                    "content": rag_answer
-                })
-        
-        # ------------------------------------------------------
-        # 2️⃣ BOOKING FLOW
-        # ------------------------------------------------------
-        booking_keywords = ["book", "reservation", "reserve"]
+        # 2) Booking flow
+        if not used_rag:
+            if start_booking_flow(final_text) or st.session_state.booking_in_progress:
+                resp = handle_booking_turn(final_text)
+                st.session_state.chat.append({"role": "assistant", "content": resp})
+                st.rerun()
 
-        if not rag_used and (any(k in text for k in booking_keywords) or st.session_state.booking_in_progress):
-            st.session_state.booking_in_progress = True
-            resp = handle_booking_turn(user_input)
-            st.session_state.chat.append({"role": "assistant", "content": resp})
-            st.rerun()
-
-        # ------------------------------------------------------
-        # 3️⃣ LLM FALLBACK
-        # ------------------------------------------------------
-        if not rag_used:
-            llm_reply = generate_answer(st.session_state.llm_client, st.session_state.chat)
-            st.session_state.chat.append({
-                "role": "assistant",
-                "content": llm_reply
-            })
+        # 3) LLM fallback
+        if not used_rag:
+            try:
+                reply = generate_answer(st.session_state.llm_client, st.session_state.chat)
+            except Exception as e:
+                reply = f"🔥 ERROR FROM LLM: {e}"
+            st.session_state.chat.append({"role": "assistant", "content": reply})
 
         st.rerun()
-
 
 
 # ----------------------------------------------------------
@@ -177,7 +262,7 @@ elif page == "Trip Planner":
     destination = st.text_input("Destination")
     if st.button("Generate Itinerary"):
         query = f"Create a detailed 3-day {trip_type} trip itinerary for {guests} guests to {destination}."
-        reply = generate_answer(st.session_state.llm_client, [{"role": "user", "content": query}])
+        reply = call_llm_system([{"role": "user", "content": query}])
         st.write(reply)
 
 elif page == "Hotels Browser":
@@ -186,7 +271,10 @@ elif page == "Hotels Browser":
         st.markdown("---")
         st.subheader(h["name"])
         st.write(h["location"])
-        st.image(h["images"][0], width=250)
+        try:
+            st.image(h["images"][0], width=250)
+        except Exception:
+            pass
 
 elif page == "Admin":
     st.header("Admin Panel")
