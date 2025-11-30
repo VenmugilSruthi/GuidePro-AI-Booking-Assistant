@@ -258,7 +258,7 @@ if page == "Chat Assistant":
         # 3️⃣ LLM fallback
         # -----------------------------
         if not used_rag:
-            reply = call_llm_system(st.session_state.chat)
+            reply = generate_answer(st.session_state.llm_client, st.session_state.chat)
             st.session_state.chat.append({"role": "assistant", "content": reply})
 
         st.rerun()
@@ -303,3 +303,4 @@ elif page == "Admin":
 elif page == "About":
     st.header("About GuidePro AI")
     st.write("Your smart AI travelling assistant.")
+
