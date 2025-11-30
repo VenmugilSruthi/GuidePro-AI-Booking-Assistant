@@ -1,5 +1,3 @@
-# app.py
-
 import os
 import streamlit as st
 from datetime import datetime
@@ -21,51 +19,89 @@ from llm_utils import get_llm_client, generate_answer
 st.set_page_config(page_title="GuidePro AI", layout="wide", initial_sidebar_state="expanded")
 
 # ----------------------------------------------------------
-# STYLES
+# AUTO-SCROLL + TYPING ANIMATION + FLOAT BUTTON JS
+# ----------------------------------------------------------
+def inject_js():
+    js_code = """
+    <script>
+
+    // Auto-scroll function
+    function scrollToBottom() {
+        const mainDiv = window.parent.document.querySelector('.main');
+        if (mainDiv) { mainDiv.scrollTop = mainDiv.scrollHeight; }
+    }
+
+    // Call scroll on load
+    scrollToBottom();
+
+    // Mutation observer = trigger scroll when new content added
+    const observer = new MutationObserver(scrollToBottom);
+    observer.observe(window.parent.document.querySelector('.main'), {
+        childList: true,
+        subtree: true
+    });
+
+    // Floating button
+    let btn = document.getElementById("floatScrollBtn");
+    if (!btn) {
+        const b = document.createElement("button");
+        b.id = "floatScrollBtn";
+        b.innerHTML = "⬇️";
+        b.style.position = "fixed";
+        b.style.bottom = "20px";
+        b.style.right = "20px";
+        b.style.padding = "12px 15px";
+        b.style.borderRadius = "50%";
+        b.style.border = "none";
+        b.style.background = "#3A7AFE";
+        b.style.color = "white";
+        b.style.fontSize = "20px";
+        b.style.cursor = "pointer";
+        b.style.zIndex = "9999";
+        b.onclick = scrollToBottom;
+        window.parent.document.body.appendChild(b);
+    }
+
+    </script>
+    """
+    st.markdown(js_code, unsafe_allow_html=True)
+
+# ----------------------------------------------------------
+# CSS FOR TYPING + SMOOTH ANIMATION
 # ----------------------------------------------------------
 st.markdown("""
 <style>
-html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
-.main { background: #ffffff; }
-[data-testid="stSidebar"] {
-    background-color: #c5d5c5;
-    border-right: 1px solid #e2e8f0;
-    padding-top: 25px;
+.chat-bubble-animate {
+    animation: fadeIn 0.4s ease-in-out;
 }
-.sidebar-title { font-size: 28px; font-weight: 800; color: #3A7AFE; text-align: center; }
-.sidebar-section { margin-top: 20px; font-weight: 700; color: #1F3B7F; }
-.hero-bg {
-    width: 100%; height: 430px;
-    background-image: url('https://images.unsplash.com/photo-1506744038136-46273834b3fb');
-    background-size: cover; background-position: center;
+@keyframes fadeIn {
+    from {opacity: 0; transform: translateY(10px);}
+    to   {opacity: 1; transform: translateY(0);}
 }
-.hero-card {
-    position: absolute; top: 62%; left: 50%;
-    transform: translate(-50%, -50%);
-    width: 70%; background: rgba(255,255,255,0.45);
-    backdrop-filter: blur(8px);
-    padding: 30px 50px;
-    border-radius: 20px; text-align: center;
-    box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+
+.typing-indicator {
+    display: inline-block;
+    padding: 8px 12px;
+    background: #e8f0ff;
+    border-radius: 10px;
+    margin-top: 8px;
 }
-.hero-title { font-size: 48px; font-weight: 900; color: #1f2e4b; }
-.hero-sub { font-size: 20px; color: #2c3e50; }
-.chat-user {
-    background: #d6e5ff; padding: 12px 18px;
-    border-radius: 14px 14px 4px 14px;
-    margin-bottom: 12px; color: #003060; max-width: 75%;
+.typing-indicator span {
+    height: 8px;
+    width: 8px;
+    margin: 0 2px;
+    background: #4a86ff;
+    display: inline-block;
+    border-radius: 50%;
+    animation: blink 1.4s infinite both;
 }
-.chat-bot {
-    background: white; padding: 12px 18px;
-    border-radius: 14px 14px 14px 4px;
-    border: 1px solid #ececec;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.08);
-    margin-bottom: 12px; max-width: 75%;
-}
-.fixed-input-container {
-    position: fixed; bottom: 0; left: 0; right: 0;
-    padding: 10px; background: white;
-    border-top: 1px solid #e1e1e1; z-index: 2000;
+.typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+.typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes blink {
+    0% { opacity: .2; }
+    20% { opacity: 1; }
+    100% { opacity: .2; }
 }
 </style>
 """, unsafe_allow_html=True)
@@ -90,16 +126,15 @@ if "llm_client" not in st.session_state:
 if "booking_in_progress" not in st.session_state:
     st.session_state.booking_in_progress = False
 
+
 # ----------------------------------------------------------
 # SIDEBAR
 # ----------------------------------------------------------
 with st.sidebar:
     st.markdown("<div class='sidebar-title'>GuidePro AI</div>", unsafe_allow_html=True)
-
     page = st.radio("Navigate", ["Chat Assistant", "Trip Planner", "Hotels Browser", "Admin", "About"])
 
     st.markdown("<div class='sidebar-section'>Upload PDF for RAG</div>", unsafe_allow_html=True)
-
     uploaded = st.file_uploader("Upload PDF file", type=["pdf"], accept_multiple_files=False)
 
     if uploaded:
@@ -107,62 +142,49 @@ with st.sidebar:
         st.session_state.rag.add_pdf(uploaded)
         st.success("PDF uploaded successfully!")
 
+
 # ----------------------------------------------------------
 # CHAT PAGE
 # ----------------------------------------------------------
 if page == "Chat Assistant":
 
-    st.markdown("""
-    <div class="hero-bg">
-        <div class="hero-card">
-            <h1 class="hero-title">GuidePro AI</h1>
-            <p class="hero-sub">Your personal AI for trips, hotels & smart planning.</p>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    inject_js()
 
-    # render chat
     for msg in st.session_state.chat:
-        render_chat_bubble(msg)
+        css = "chat-bubble-animate"
+        render_chat_bubble(msg, extra_css=css)
 
     st.markdown("---")
 
     new_input = st.chat_input("Type your message…")
 
     if new_input:
-        user_msg = new_input.lower()
+        user_text = new_input.lower()
         st.session_state.chat.append({"role": "user", "content": new_input})
 
-        # ----------------------------------------------------
-        # 1) RAG TRIGGER — FIRST PRIORITY (fix for room types)
-        # ----------------------------------------------------
-        rag_keywords = [
-            "room", "rooms", "room type", "room types", "amenities", "features",
-            "summary", "pdf", "document", "information", "details",
-            "policy", "faq", "hotel", "rules"
-        ]
+        inject_js()
+        st.rerun()
 
+        # RAG check
         if len(st.session_state.rag.chunks) > 0:
-            # Trigger RAG for any informational query
-            if "?" in user_msg or any(k in user_msg for k in rag_keywords):
-                answer = st.session_state.rag.query(new_input)
-                st.session_state.chat.append({"role": "assistant", "content": answer})
-                st.rerun()
-
-        # ----------------------------------------------------
-        # 2) BOOKING FLOW
-        # ----------------------------------------------------
-        if start_booking_flow(new_input) or st.session_state.booking_in_progress:
-            resp = handle_booking_turn(new_input)
-            st.session_state.chat.append({"role": "assistant", "content": resp})
+            rag_match = st.session_state.rag.query(new_input)
+            st.session_state.chat.append({"role": "assistant", "content": rag_match})
+            inject_js()
             st.rerun()
 
-        # ----------------------------------------------------
-        # 3) LLM FALLBACK
-        # ----------------------------------------------------
+        # Booking flow
+        if start_booking_flow(new_input) or st.session_state.booking_in_progress:
+            bot = handle_booking_turn(new_input)
+            st.session_state.chat.append({"role": "assistant", "content": bot})
+            inject_js()
+            st.rerun()
+
+        # Normal LLM reply
         reply = generate_answer(st.session_state.llm_client, st.session_state.chat)
         st.session_state.chat.append({"role": "assistant", "content": reply})
+        inject_js()
         st.rerun()
+
 
 # ----------------------------------------------------------
 # TRIP PLANNER
@@ -175,6 +197,7 @@ elif page == "Trip Planner":
     if st.button("Generate Itinerary"):
         q = f"Create a detailed 3-day {trip_type} trip itinerary for {guests} guests to {destination}."
         st.write(generate_answer(st.session_state.llm_client, [{"role": "user", "content": q}]))
+
 
 # ----------------------------------------------------------
 # HOTELS BROWSER
@@ -190,8 +213,9 @@ elif page == "Hotels Browser":
         except:
             pass
 
+
 # ----------------------------------------------------------
-# ADMIN PAGE
+# ADMIN
 # ----------------------------------------------------------
 elif page == "Admin":
     st.header("Admin Panel")
@@ -202,13 +226,14 @@ elif page == "Admin":
         export_bookings_csv()
         st.success("Exported!")
 
-    del_id = st.text_input("Delete booking ID")
+    delete_id = st.text_input("Delete booking ID")
     if st.button("Delete"):
-        delete_booking(del_id)
-        st.success("Deleted")
+        delete_booking(delete_id)
+        st.success("Deleted!")
+
 
 # ----------------------------------------------------------
-# ABOUT PAGE
+# ABOUT
 # ----------------------------------------------------------
 elif page == "About":
     st.header("About GuidePro AI")
