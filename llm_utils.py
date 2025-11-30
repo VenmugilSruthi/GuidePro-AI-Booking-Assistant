@@ -2,10 +2,10 @@ import streamlit as st
 from groq import Groq
 
 # Load Groq LLM API key
-GROQ_API_KEY = st.secrets.get("GROQ_API_KEY", None)
+GROQ_API_KEY = st.secrets.get("GROQ_API_KEY")
 
 # Load LLM model
-LLM_MODEL = st.secrets.get("LLM_MODEL", "llama3-8b-8192")
+LLM_MODEL = st.secrets.get("LLM_MODEL", "llama-3.1-8b-instant")
 
 
 def get_llm_client():
@@ -50,3 +50,4 @@ def generate_answer(client, messages):
     except Exception as e:
         print("🔥 Groq Error:", e)
         return f"🔥 ERROR FROM LLM: {str(e)}"
+
