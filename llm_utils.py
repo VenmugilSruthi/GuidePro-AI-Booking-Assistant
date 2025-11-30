@@ -27,7 +27,7 @@ def generate_answer(client, messages):
     if client is None:
         return "❌ LLM not configured. Missing GROQ_API_KEY."
 
-    # --- Prepare cleaned messages ---
+    # Clean messages
     cleaned_messages = []
     for m in messages:
         if isinstance(m, dict) and "role" in m and "content" in m:
@@ -45,9 +45,9 @@ def generate_answer(client, messages):
             messages=cleaned_messages
         )
 
-        return resp.choices[0].message["content"]
+        # ✅ NEW GROQ FORMAT
+        return resp.choices[0].message.content
 
     except Exception as e:
         print("🔥 Groq Error:", e)
         return f"🔥 ERROR FROM LLM: {str(e)}"
-
