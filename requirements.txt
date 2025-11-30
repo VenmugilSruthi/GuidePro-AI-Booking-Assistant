@@ -9,4 +9,5 @@ pytesseract
 openai
 groq
 markdown
-sentence-transformers
+sentence-transformers==2.2.2
+torch
